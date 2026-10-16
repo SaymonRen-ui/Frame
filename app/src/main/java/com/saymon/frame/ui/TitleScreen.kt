@@ -1,5 +1,7 @@
 package com.saymon.frame.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,6 +49,9 @@ fun TitleScreen(
 ) {
     val name = vm.titleName(titleId)
     val chapters = remember(vm.libTick) { vm.chapters(titleId, name) }
+    val pickCbz = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> vm.importChapters(titleId, uris) }
     val tabs = remember(vm.libTick) { vm.store.tabs() }
     val mine = remember(vm.libTick) { vm.titleTabs(titleId).toMutableSet() }
     val cover = vm.covers[titleId]
@@ -131,6 +136,12 @@ fun TitleScreen(
             }
             item {
                 Text("Главы", style = MaterialTheme.typography.titleSmall)
+            }
+            item {
+                OutlinedButton(
+                    onClick = { pickCbz.launch(arrayOf("*/*")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("+ Добавить главы (CBZ)") }
             }
             items(chapters, key = { it.uri }) { ch ->
                 val read = vm.progress(titleId, ch.uri) > 0

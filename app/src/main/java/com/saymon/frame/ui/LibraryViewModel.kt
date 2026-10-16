@@ -7,11 +7,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.saymon.frame.core.cbz.ChapterInfo
-import com.saymon.frame.core.cbz.loadCover
+import com.saymon.frame.core.cbz.ChapterSession
+import com.saymon.frame.core.cbz.decodePage
 import com.saymon.frame.data.NaturalSort
 import com.saymon.frame.data.Progress
 import com.saymon.frame.data.Store
@@ -85,35 +85,37 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         activeTab = t
     }
 
-    fun setLibraryUri(uri: String) {
+    /** Создать рабочую папку «Фрейм» в корне устройства. */
+    fun ensureWorkDir() {
         try {
-            ctx.contentResolver.takePersistableUriPermission(
-                Uri.parse(uri),
-                Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            workDir().mkdirs()
         } catch (_: Exception) {
         }
-        store.setLibraryUri(uri)
-        refresh()
     }
+
+    /** Корень библиотеки: /sdcard/Фрейм. */
+    fun workDir(): java.io.File =
+        java.io.File(
+            android.os.Environment.getExternalStorageDirectory(),
+            "Фрейм")
+
+    fun hasFullAccess(): Boolean =
+        android.os.Build.VERSION.SDK_INT < 30 ||
+            android.os.Environment.isExternalStorageManager()
 
     fun refresh() {
         libTick++
         viewModelScope.launch {
-            val uri = store.libraryUri()
-            if (uri.isEmpty()) {
-                titles = emptyList()
-                return@launch
-            }
             val list = withContext(Dispatchers.IO) {
                 try {
-                    val root = DocumentFile.fromTreeUri(ctx, Uri.parse(uri))
-                        ?: return@withContext emptyList<Title>()
-                    (root.listFiles().toList())
-                        .filter { it.isDirectory }
-                        .map { Title(it.uri.toString(), it.name ?: "…") }
-                        .sortedWith { a, b ->
+                    val root = workDir()
+                    if (!root.isDirectory) return@withContext emptyList<Title>()
+                    root.listFiles()?.toList()
+                        ?.filter { it.isDirectory }
+                        ?.map { Title(it.absolutePath, it.name) }
+                        ?.sortedWith { a, b ->
                             NaturalSort.compare(a.name, b.name)
-                        }
+                        }.orEmpty()
                 } catch (_: Exception) {
                     emptyList()
                 }
@@ -122,45 +124,125 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
             // Обложки — лениво, по мере списка
             for (t in list) {
                 if (covers.containsKey(t.id)) continue
-                val bmp = withContext(Dispatchers.IO) {
-                    try {
-                        val dir = DocumentFile.fromTreeUri(ctx, Uri.parse(t.id))
-                            ?: return@withContext null
-                        val chaps = chaptersOf(dir, t.id, t.name)
-                        loadCover(ctx, dir, chaps)?.asImageBitmap()
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
+                val bmp = withContext(Dispatchers.IO) { coverOf(t) }
                 covers = covers + (t.id to bmp)
             }
         }
     }
 
+    private fun coverOf(t: Title):
+        androidx.compose.ui.graphics.ImageBitmap? {
+        return try {
+            val dir = java.io.File(t.id)
+            val cover = dir.listFiles()?.firstOrNull {
+                val n = it.name.lowercase()
+                (n == "cover.jpg" || n == "cover.png" ||
+                    n == "cover.jpeg") && it.isFile
+            }
+            if (cover != null) {
+                decodeCoverFile(cover)
+            } else {
+                val chaps = chapters(t.id, t.name)
+                if (chaps.isEmpty()) return null
+                val session = try {
+                    ChapterSession.openFile(chaps.first().uri)
+                } catch (_: Exception) {
+                    return null
+                }
+                try {
+                    val bmp = decodePage(session, 0, 512)?.asImageBitmap()
+                    session.close()
+                    bmp
+                } catch (_: Exception) {
+                    try {
+                        session.close()
+                    } catch (_: Exception) {
+                    }
+                    null
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun decodeCoverFile(f: java.io.File):
+        androidx.compose.ui.graphics.ImageBitmap? {
+        return try {
+            com.saymon.frame.core.cbz.decodeFile(f, 512)?.asImageBitmap()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun chapters(titleId: String, titleName: String): List<ChapterInfo> {
         return try {
-            val dir = DocumentFile.fromTreeUri(ctx, Uri.parse(titleId))
-                ?: return emptyList()
-            chaptersOf(dir, titleId, titleName)
+            java.io.File(titleId).listFiles()?.toList()
+                ?.filter {
+                    it.isFile && it.name.lowercase().endsWith(".cbz")
+                }
+                ?.map { ChapterInfo(titleId, it.absolutePath, it.name) }
+                ?.sortedWith { a, b -> NaturalSort.compare(a.name, b.name) }
+                .orEmpty()
         } catch (_: Exception) {
             emptyList()
         }
     }
 
-    private fun chaptersOf(
-        dir: DocumentFile,
-        titleId: String,
-        @Suppress("UNUSED_PARAMETER") titleName: String,
-    ): List<ChapterInfo> {
+    /** Новая папка произведения в библиотеке. */
+    fun addTitle(name: String): Boolean {
         return try {
-            dir.listFiles().toList()
-                .filter {
-                    it.isFile && (it.name ?: "").lowercase().endsWith(".cbz")
-                }
-                .map { ChapterInfo(titleId, it.uri.toString(), it.name ?: "…") }
-                .sortedWith { a, b -> NaturalSort.compare(a.name, b.name) }
+            val clean = name.trim().replace("/", "_").take(80)
+            if (clean.isEmpty()) return false
+            java.io.File(workDir(), clean).mkdirs()
+            refresh()
+            true
         } catch (_: Exception) {
-            emptyList()
+            false
+        }
+    }
+
+    /** Скопировать CBZ в папку произведения. */
+    fun importChapters(titleId: String, uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    val dir = java.io.File(titleId)
+                    for (uri in uris) {
+                        val name = displayName(uri) ?: "глава.cbz"
+                        val safe = name.replace("/", "_")
+                        var dest = java.io.File(dir, safe)
+                        var i = 1
+                        while (dest.exists()) {
+                            val d = safe.lastIndexOf('.')
+                            val b = if (d > 0) safe.substring(0, d) else safe
+                            val e = if (d > 0) safe.substring(d) else ""
+                            dest = java.io.File(dir, "$b ($i)$e")
+                            i++
+                        }
+                        ctx.contentResolver.openInputStream(uri)?.use { inp ->
+                            dest.outputStream().use { inp.copyTo(it) }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            refresh()
+        }
+    }
+
+    private fun displayName(uri: Uri): String? {
+        return try {
+            ctx.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    val i = c.getColumnIndex(
+                        android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (i >= 0) c.getString(i) else null
+                } else null
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 

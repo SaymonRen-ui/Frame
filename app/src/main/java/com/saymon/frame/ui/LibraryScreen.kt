@@ -19,8 +19,11 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -33,8 +36,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,13 +55,15 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
-    val pickLib = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) vm.setLibraryUri(uri.toString())
-    }
     var searching by remember { mutableStateOf(false) }
     var sorting by remember { mutableStateOf(false) }
+    var adding by remember { mutableStateOf(false) }
+    val fullAccess = vm.hasFullAccess()
+
+    LaunchedEffect(Unit) {
+        vm.ensureWorkDir()
+        vm.refresh()
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -64,6 +71,13 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
             TopAppBar(
                 title = { Text("Фрейм") },
                 actions = {
+                    // Обновить данные библиотеки
+                    IconButton(onClick = { vm.refresh() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Обновить")
+                    }
+                    IconButton(onClick = { adding = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Новое произведение")
+                    }
                     IconButton(onClick = { searching = !searching }) {
                         Icon(Icons.Default.Search, contentDescription = "Поиск")
                     }
@@ -81,6 +95,26 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
             )
         }
     ) { pad ->
+        if (adding) {
+            var name by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { adding = false },
+                title = { Text("Новое произведение") },
+                text = {
+                    OutlinedTextField(name, { name = it },
+                        label = { Text("Название") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth())
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (vm.addTitle(name)) adding = false
+                    }) { Text("Создать") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { adding = false }) { Text("Отмена") }
+                })
+        }
         Column(Modifier.fillMaxSize().padding(pad)) {
             if (searching) {
                 OutlinedTextField(
@@ -105,23 +139,23 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                         label = { Text(t) })
                 }
             }
-            val libUri = vm.store.libraryUri()
-            if (libUri.isEmpty()) {
+            val libGone = !vm.workDir().isDirectory
+            if (!fullAccess) {
+                // Без полного доступа корень закрыт — ведём в настройки
                 Column(
                     Modifier.fillMaxSize().padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text("Покажи папку библиотеки",
+                    Text("Нужен доступ к файлам",
                         style = MaterialTheme.typography.titleLarge)
-                    Text("В ней — папки произведений с главами CBZ",
+                    Text("Библиотека живёт в папке Фрейм в корне устройства — " +
+                        "без доступа её не видно",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(
-                        onClick = { pickLib.launch(null) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Выбрать папку") }
+                    Text("Настройки → Доступ к файлам → Расширенный доступ",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            } else {
+            } else if (libGone) {
                 val mapping = remember(vm.libTick) { vm.store.titleTabs() }
                 val hist = remember(vm.libTick) { vm.history() }
                 var list = vm.titles.filter {

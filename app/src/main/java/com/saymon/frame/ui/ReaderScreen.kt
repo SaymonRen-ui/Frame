@@ -126,7 +126,9 @@ fun ReaderScreen(
         loadErr = ""
         val ch = chapter ?: return@LaunchedEffect
         try {
-            val s = ChapterSession.open(context, ch.uri, titleId)
+            val s = withContext(Dispatchers.IO) {
+                ChapterSession.openFile(ch.uri)
+            }
             session = s
             pages = s.entries.size
         } catch (e: Exception) {

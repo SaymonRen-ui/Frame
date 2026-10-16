@@ -29,6 +29,22 @@ class ChapterSession private constructor(
     }
 
     companion object {
+        /** Глава — обычный файл (библиотека в корне устройства). */
+        fun openFile(path: String): ChapterSession {
+            val file = File(path)
+            val zip = ZipFile(file)
+            val entries = zipEntries(zip)
+            if (entries.isEmpty()) {
+                try {
+                    zip.close()
+                } catch (_: Exception) {
+                }
+                throw IllegalStateException("В CBZ нет картинок")
+            }
+            return ChapterSession(zip, entries, file)
+        }
+
+        /** Глава по content-URI (копия в кэш). */
         suspend fun open(
             context: Context,
             chapterUri: String,
@@ -45,8 +61,11 @@ class ChapterSession private constructor(
                     cache.outputStream().use { inp.copyTo(it) }
                 } ?: throw IllegalStateException("Не открылся CBZ")
             }
-            val zip = ZipFile(cache)
-            val entries = zip.entries().asSequence()
+            openFile(cache.absolutePath)
+        }
+
+        private fun zipEntries(zip: ZipFile): List<String> {
+            return zip.entries().asSequence()
                 .filter { !it.isDirectory }
                 .map { it.name }
                 .filter { n ->
@@ -59,14 +78,6 @@ class ChapterSession private constructor(
                     com.saymon.frame.data.NaturalSort.compare(an, bn)
                 }
                 .toList()
-            if (entries.isEmpty()) {
-                try {
-                    zip.close()
-                } catch (_: Exception) {
-                }
-                throw IllegalStateException("В CBZ нет картинок")
-            }
-            ChapterSession(zip, entries, cache)
         }
     }
 }
@@ -117,6 +128,20 @@ private fun sessionZip(session: ChapterSession, entry: String) =
     } catch (_: Exception) {
         null
     }
+
+/** Обложка из обычного файла (папка в корне устройства). */
+fun decodeFile(f: File, maxPx: Int): Bitmap? {
+    return try {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(f.absolutePath, bounds)
+        var s = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / s > maxPx) s *= 2
+        BitmapFactory.decodeFile(f.absolutePath,
+            BitmapFactory.Options().apply { inSampleSize = s })
+    } catch (_: Exception) {
+        null
+    }
+}
 
 /** Обложка произведения: cover.jpg в папке, иначе первая страница первой главы. */
 suspend fun loadCover(

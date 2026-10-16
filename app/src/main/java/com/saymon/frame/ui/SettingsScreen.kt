@@ -41,11 +41,6 @@ import com.saymon.frame.data.ReadMode
 @Composable
 fun SettingsScreen(vm: LibraryViewModel) {
     val context = LocalContext.current
-    val pickLib = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) vm.setLibraryUri(uri.toString())
-    }
     var cacheMsg by remember { mutableStateOf("") }
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -165,9 +160,24 @@ fun SettingsScreen(vm: LibraryViewModel) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Библиотека",
                         style = MaterialTheme.typography.titleMedium)
-                    Button(onClick = { pickLib.launch(null) },
+                    Text("Папка Фрейм в корне устройства: " +
+                        if (vm.workDir().isDirectory) "на месте"
+                        else "нет доступа",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = {
+                        try {
+                            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                                context.startActivity(Intent(
+                                    android.provider.Settings
+                                        .ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")))
+                            }
+                        } catch (_: Exception) {
+                        }
+                    },
                         modifier = Modifier.fillMaxWidth()) {
-                        Text("Выбрать папку библиотеки")
+                        Text(if (vm.hasFullAccess()) "Доступ есть ✓"
+                        else "Дать доступ к файлам")
                     }
                     OutlinedButton(
                         onClick = {
