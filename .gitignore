@@ -1,0 +1,27 @@
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Локальная конфигурация машины (SDK-путь и т.п.) — не коммитить
+local.properties
+
+# Релизный ключ подписи — НИКОГДА не коммитить, хранить бэкап отдельно!
+*.jks
+*.keystore
+# Артефакты подписи для сторов (зашифрованный ключ, инструмент PEPK)
+pepk.jar
+pepk_out.zip
+upload_cert.pem
+
+# IDE
+.idea/
+.kotlin/
+*.iml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Логи сборок
+*.log
