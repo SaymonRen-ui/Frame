@@ -65,6 +65,31 @@ class Store(context: Context) {
         }
     }
 
+    // --- Метаданные произведения (описание, рейтинг, отзыв) ---
+    fun titleMeta(titleId: String): TitleMeta {
+        return try {
+            val o = JSONObject(prefs().getString("meta|$titleId", "{}").orEmpty())
+            TitleMeta(
+                description = o.optString("description", ""),
+                rating = o.optDouble("rating", 0.0),
+                review = o.optString("review", "")
+            )
+        } catch (_: Exception) {
+            TitleMeta()
+        }
+    }
+
+    fun setTitleMeta(titleId: String, meta: TitleMeta) {
+        try {
+            val o = JSONObject()
+            o.put("description", meta.description)
+            o.put("rating", meta.rating)
+            o.put("review", meta.review)
+            prefs().edit { putString("meta|$titleId", o.toString()) }
+        } catch (_: Exception) {
+        }
+    }
+
     // --- Прогресс: "titleId|chapterUri" -> страница ---
     fun progress(titleId: String, chapterUri: String): Int =
         prefs().getInt("p|$titleId|$chapterUri", 0)
@@ -178,3 +203,10 @@ object Orient {
     const val PORTRAIT = 1
     const val LANDSCAPE = 2
 }
+
+/** Метаданные произведения: описание, рейтинг, отзыв. */
+data class TitleMeta(
+    val description: String = "",
+    val rating: Double = 0.0,
+    val review: String = ""
+)

@@ -1,7 +1,12 @@
 package com.saymon.frame.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -10,32 +15,48 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Image as ImageIcon
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.saymon.frame.data.TitleMeta
+import java.io.File
 
 /**
- * Произведение: обложка, главы, вкладки, продолжить.
+ * Произведение: обложка, описание, рейтинг, отзыв, главы, читать.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,15 +66,38 @@ fun TitleScreen(
     onBack: () -> Unit,
     onRead: (chapterUri: String) -> Unit,
 ) {
+    val context = LocalContext.current
     val name = vm.titleName(titleId)
     val chapters = remember(vm.libTick) { vm.chapters(titleId, name) }
+    val meta = remember(vm.libTick) { vm.titleMeta(titleId) }
+    var metaEdit by remember { mutableStateOf(meta) }
+
     val tabs = remember(vm.libTick) { vm.store.tabs() }
     val mine = remember(vm.libTick) { vm.titleTabs(titleId).toMutableSet() }
     val cover = vm.covers[titleId]
-    // Последняя читанная глава — для кнопки «Продолжить»
+
     val last = remember(vm.libTick) {
         vm.history().firstOrNull { it.titleId == titleId }
     }
+
+    var editingMeta by remember { mutableStateOf(false) }
+
+    val pickImage = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            copyCover(context, titleId, it)
+            vm.refresh()
+        }
+    }
+
+    val pickCbz = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> vm.importChapters(titleId, uris) }
+
+    val totalChapters = chapters.size
+    val readChapters = chapters.count { vm.progress(titleId, it.uri) > 0 }
+    val progressPct = if (totalChapters > 0) readChapters.toFloat() / totalChapters else 0f
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -62,87 +106,279 @@ fun TitleScreen(
                 title = { Text(name) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Назад")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { editingMeta = !editingMeta }) {
+                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Ещё")
+                    }
+                    DropdownMenu(
+                        expanded = editingMeta,
+                        onDismissRequest = { editingMeta = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Изменить категорию") },
+                            onClick = { editingMeta = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Обновить обложку") },
+                            onClick = { pickImage.launch("image/*"); editingMeta = false }
+                        )
                     }
                 }
             )
         }
     ) { pad ->
-        LazyColumn(
+        Column(
             Modifier.fillMaxSize().padding(pad).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Card(modifier = Modifier.width(120.dp)) {
-                        if (cover != null) {
-                            Image(cover, contentDescription = name,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxWidth()
-                                    .aspectRatio(3f / 4f))
-                        } else {
-                            androidx.compose.foundation.layout.Box(
-                                Modifier.fillMaxWidth().aspectRatio(3f / 4f),
-                                contentAlignment = Alignment.Center
-                            ) { Text("?") }
-                        }
+            // --- Обложка + мета ---
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Card(
+                    modifier = Modifier
+                        .width(140.dp)
+                        .aspectRatio(3f / 4f)
+                        .clickable { pickImage.launch("image/*") }
+                ) {
+                    cover?.let {
+                        Image(
+                            bitmap = it,
+                            contentDescription = name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } ?: Box(
+                        Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(name, style = MaterialTheme.typography.titleLarge)
-                        Text("Глав: ${chapters.size}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (last != null) {
-                            Button(onClick = { onRead(last.chapterUri) },
-                                modifier = Modifier.fillMaxWidth()) {
-                                Text("Продолжить")
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(name, style = MaterialTheme.typography.titleLarge)
+                    if (editingMeta) {
+                        OutlinedTextField(
+                            value = metaEdit.description,
+                            onValueChange = { metaEdit = metaEdit.copy(description = it) },
+                            label = { Text("Описание") },
+                            singleLine = false,
+                            maxLines = 3,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Рейтинг: ${"%.1f".format(metaEdit.rating)} / 5",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f))
+                            (1..5).forEach { star ->
+                                IconButton(
+                                    onClick = {
+                                        metaEdit = metaEdit.copy(rating = star.toDouble())
+                                    }
+                                ) {
+                                    val filled = star <= metaEdit.rating.toInt()
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = if (filled)
+                                            MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                        } else if (chapters.isNotEmpty()) {
-                            Button(onClick = { onRead(chapters.first().uri) },
-                                modifier = Modifier.fillMaxWidth()) {
-                                Text("Читать с 1 главы")
+                        }
+                        OutlinedTextField(
+                            value = metaEdit.review,
+                            onValueChange = { metaEdit = metaEdit.copy(review = it) },
+                            label = { Text("Отзыв") },
+                            singleLine = false,
+                            maxLines = 3,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = {
+                                vm.setTitleMeta(titleId, metaEdit)
+                                editingMeta = false
+                            }) { Text("Сохранить") }
+                            TextButton(onClick = {
+                                metaEdit = meta
+                                editingMeta = false
+                            }) { Text("Отмена") }
+                        }
+                    } else {
+                        if (metaEdit.description.isNotBlank()) {
+                            Text(metaEdit.description,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2)
+                        }
+                        if (metaEdit.rating > 0) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                (1..5).forEach { star ->
+                                    val filled = star <= metaEdit.rating.toInt()
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = if (filled)
+                                            MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(" ${"%.1f".format(metaEdit.rating)} / 5",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                        }
+                        if (metaEdit.review.isNotBlank()) {
+                            Text("Отзыв: ${metaEdit.review}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2)
                         }
                     }
                 }
             }
-            item {
-                Text("Мои вкладки",
-                    style = MaterialTheme.typography.titleSmall)
+
+            // --- Прогресс ---
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgress(progress = progressPct)
+                Text(
+                    text = if (totalChapters > 0)
+                        "Глав прочитано: $readChapters / $totalChapters"
+                    else "Глав не найдено",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            item {
-                androidx.compose.foundation.layout.FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    tabs.forEach { t ->
-                        val has = mine.contains(t)
-                        FilterChip(
-                            selected = has,
-                            onClick = {
-                                vm.toggleTitleTab(titleId, t)
-                                if (has) mine.remove(t) else mine.add(t)
-                            },
-                            label = { Text(t) },
-                            leadingIcon = if (has) {
-                                { Icon(Icons.Default.Check, contentDescription = null) }
-                            } else null
+
+            // --- Вкладки ---
+            Text("Мои вкладки", style = MaterialTheme.typography.titleSmall)
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                tabs.forEach { t ->
+                    val has = mine.contains(t)
+                    FilterChip(
+                        selected = has,
+                        onClick = {
+                            vm.toggleTitleTab(titleId, t)
+                            if (has) mine.remove(t) else mine.add(t)
+                        },
+                        label = { Text(t) },
+                        leadingIcon = if (has) {
+                            { Icon(imageVector = Icons.Default.Check, contentDescription = null) }
+                        } else null
+                    )
+                }
+            }
+
+            // --- Главы ---
+            Text("Главы", style = MaterialTheme.typography.titleSmall)
+            if (chapters.isNotEmpty()) {
+                OutlinedButton(
+                    onClick = { pickCbz.launch(arrayOf("*/*")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("+ Добавить главы (CBZ)") }
+            }
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(chapters, key = { it.uri }) { ch ->
+                    val read = vm.progress(titleId, ch.uri) > 0
+                    OutlinedButton(
+                        onClick = { onRead(ch.uri) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            (if (read) "✓ " else "") + ch.name,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
             }
-            item {
-                Text("Главы", style = MaterialTheme.typography.titleSmall)
-            }
-            items(chapters, key = { it.uri }) { ch ->
-                val read = vm.progress(titleId, ch.uri) > 0
-                OutlinedButton(
-                    onClick = { onRead(ch.uri) },
-                    modifier = Modifier.fillMaxWidth()
+
+            // --- Кнопка читать ---
+            if (chapters.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    Text(
-                        (if (read) "✓ " else "") + ch.name,
-                        modifier = Modifier.weight(1f))
+                    Button(
+                        onClick = { onRead(last?.chapterUri ?: chapters.first().uri) },
+                        modifier = Modifier.width(180.dp)
+                    ) {
+                        Text(if (last != null) "Продолжить" else "Читать")
+                    }
                 }
             }
         }
+    }
+}
+
+/** Круговой индикатор прогресса. */
+@Composable
+fun CircularProgress(progress: Float) {
+    val sizeDp = 100.dp
+    Box(
+        modifier = Modifier.size(sizeDp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier
+                .size(sizeDp)
+                .background(
+                    Color(
+                        red = MaterialTheme.colorScheme.primary.red,
+                        green = MaterialTheme.colorScheme.primary.green,
+                        blue = MaterialTheme.colorScheme.primary.blue,
+                        alpha = 0.1f
+                    ),
+                    CircleShape
+                )
+        )
+        Box(
+            Modifier
+                .size(sizeDp)
+                .background(
+                    Color(
+                        red = MaterialTheme.colorScheme.primary.red,
+                        green = MaterialTheme.colorScheme.primary.green,
+                        blue = MaterialTheme.colorScheme.primary.blue,
+                        alpha = progress.coerceIn(0f, 1f)
+                    ),
+                    CircleShape
+                )
+        )
+        Text(
+            text = "${(progress * 100).toInt()}%",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+/** Скопировать выбранное изображение как обложку в папку произведения. */
+fun copyCover(context: android.content.Context, titleId: String, uri: android.net.Uri) {
+    try {
+        val dir = File(titleId)
+        dir.mkdirs()
+        val cover = File(dir, "cover.jpg")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            cover.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+    } catch (_: Exception) {
     }
 }
