@@ -182,6 +182,11 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Инвалидировать кэш обложки произведения. */
+    fun invalidateCover(titleId: String) {
+        covers = covers - titleId
+    }
+
     /** Новая папка произведения в библиотеке. */
     fun addTitle(name: String): Boolean {
         return try {

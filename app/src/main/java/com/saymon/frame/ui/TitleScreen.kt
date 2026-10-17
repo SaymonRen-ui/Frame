@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -22,9 +23,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Image as ImageIcon
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -81,12 +85,14 @@ fun TitleScreen(
     }
 
     var editingMeta by remember { mutableStateOf(false) }
+    var sortChapters by remember { mutableStateOf(false) }
 
     val pickImage = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
             copyCover(context, titleId, it)
+            vm.invalidateCover(titleId)
             vm.refresh()
         }
     }
@@ -110,21 +116,29 @@ fun TitleScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { editingMeta = !editingMeta }) {
-                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Ещё")
+                    IconButton(onClick = { sortChapters = !sortChapters }) {
+                        Icon(imageVector = Icons.Default.Sort, contentDescription = "Сортировка глав")
                     }
+                    // Добавить главы
+                    IconButton(onClick = { pickCbz.launch(arrayOf("*/*")) }) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = "Добавить главы")
+                    }
+                    // Еще: обновить главы, изменить категорию
                     DropdownMenu(
                         expanded = editingMeta,
                         onDismissRequest = { editingMeta = false }
                     ) {
                         DropdownMenuItem(
+                            text = { Text("Обновить главы") },
+                            onClick = { vm.refresh(); editingMeta = false }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Изменить категорию") },
                             onClick = { editingMeta = false }
                         )
-                        DropdownMenuItem(
-                            text = { Text("Обновить обложку") },
-                            onClick = { pickImage.launch("image/*"); editingMeta = false }
-                        )
+                    }
+                    IconButton(onClick = { editingMeta = !editingMeta }) {
+                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Ещё")
                     }
                 }
             )
@@ -134,7 +148,7 @@ fun TitleScreen(
             Modifier.fillMaxSize().padding(pad).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // --- Обложка + мета ---
+            // --- Обложка + мета (всегда visibles, редактируются инлайн) ---
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -165,7 +179,35 @@ fun TitleScreen(
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(name, style = MaterialTheme.typography.titleLarge)
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(name, style = MaterialTheme.typography.titleLarge)
+                        if (editingMeta) {
+                            TextButton(
+                                onClick = {
+                                    vm.setTitleMeta(titleId, metaEdit)
+                                    editingMeta = false
+                                }
+                            ) { Text("Сохранить") }
+                            TextButton(
+                                onClick = {
+                                    metaEdit = meta
+                                    editingMeta = false
+                                }
+                            ) { Text("Отмена") }
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    metaEdit = meta
+                                    editingMeta = true
+                                }
+                            ) {
+                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Редактировать")
+                            }
+                        }
+                    }
                     if (editingMeta) {
                         OutlinedTextField(
                             value = metaEdit.description,
@@ -204,16 +246,6 @@ fun TitleScreen(
                             maxLines = 3,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Row(horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = {
-                                vm.setTitleMeta(titleId, metaEdit)
-                                editingMeta = false
-                            }) { Text("Сохранить") }
-                            TextButton(onClick = {
-                                metaEdit = meta
-                                editingMeta = false
-                            }) { Text("Отмена") }
-                        }
                     } else {
                         if (metaEdit.description.isNotBlank()) {
                             Text(metaEdit.description,
@@ -285,16 +317,11 @@ fun TitleScreen(
 
             // --- Главы ---
             Text("Главы", style = MaterialTheme.typography.titleSmall)
-            if (chapters.isNotEmpty()) {
-                OutlinedButton(
-                    onClick = { pickCbz.launch(arrayOf("*/*")) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("+ Добавить главы (CBZ)") }
-            }
+            val sortedChapters = if (sortChapters) chapters.sortedBy { it.name } else chapters
             LazyColumn(
                 modifier = Modifier.fillMaxWidth()
             ) {
-                items(chapters, key = { it.uri }) { ch ->
+                items(sortedChapters, key = { it.uri }) { ch ->
                     val read = vm.progress(titleId, ch.uri) > 0
                     OutlinedButton(
                         onClick = { onRead(ch.uri) },
