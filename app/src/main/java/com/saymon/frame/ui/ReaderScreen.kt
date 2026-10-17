@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -73,11 +72,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Читалка главы: лента / постранично LTR-RTL-вертикально,
- * зоны касания, двойной тап-зум, номер страницы, фон.
- * Долгое нажатие по центру — меню настроек (как в Mihon).
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderScreen(
@@ -91,8 +85,7 @@ fun ReaderScreen(
     val scope = rememberCoroutineScope()
     val chapters = remember { vm.chapters(titleId, vm.titleName(titleId)) }
     var idx by remember(chapterUri) {
-        mutableIntStateOf(
-            chapters.indexOfFirst { it.uri == chapterUri }.coerceAtLeast(0))
+        mutableIntStateOf(chapters.indexOfFirst { it.uri == chapterUri }.coerceAtLeast(0))
     }
     val chapter = chapters.getOrNull(idx)
     val mode = vm.store.readMode()
@@ -105,7 +98,6 @@ fun ReaderScreen(
         else -> Color.Black
     }
 
-    // Ориентация + не гасить экран + полноэкранный режим
     LaunchedEffect(Unit) {
         (context as? Activity)?.requestedOrientation = when (vm.store.orientation()) {
             Orient.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -128,13 +120,11 @@ fun ReaderScreen(
         v.keepScreenOn = vm.store.keepScreen()
         onDispose {
             v.keepScreenOn = old
-            (context as? Activity)?.requestedOrientation =
-                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             v.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
         }
     }
 
-    // Сессия главы: кэш-копия + ZipFile
     var session by remember { mutableStateOf<ChapterSession?>(null) }
     var pages by remember { mutableIntStateOf(0) }
     var loadErr by remember { mutableStateOf("") }
@@ -145,31 +135,26 @@ fun ReaderScreen(
         loadErr = ""
         val ch = chapter ?: return@LaunchedEffect
         try {
-            val s = withContext(Dispatchers.IO) {
-                ChapterSession.openFile(ch.uri)
-            }
+            val s = withContext(Dispatchers.IO) { ChapterSession.openFile(ch.uri) }
             session = s
             pages = s.entries.size
         } catch (e: Exception) {
             loadErr = e.message ?: "Не открылась глава"
         }
     }
-    DisposableEffect(Unit) {
-        onDispose { session?.close() }
-    }
+    DisposableEffect(Unit) { onDispose { session?.close() } }
 
     var page by remember(chapter?.uri) {
         mutableIntStateOf(vm.progress(titleId, chapter?.uri.orEmpty()))
     }
     var menuOpen by remember { mutableStateOf(false) }
-    var menuTab by remember { mutableStateOf(0) } // 0 чтение, 1 основные, 2 пользователь
+    var menuTab by remember { mutableStateOf(0) }
 
     fun save() {
         val ch = chapter ?: return
         if (pages <= 0) return
         vm.saveProgress(Progress(titleId, vm.titleName(titleId),
-            ch.uri, ch.name, page.coerceIn(0, pages - 1), pages,
-            System.currentTimeMillis()))
+            ch.uri, ch.name, page.coerceIn(0, pages - 1), pages, System.currentTimeMillis()))
     }
 
     if (chapter == null || loadErr.isNotEmpty()) {
@@ -178,12 +163,8 @@ fun ReaderScreen(
             topBar = {
                 TopAppBar(
                     title = { Text("Глава") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack,
-                                contentDescription = "Назад")
-                        }
-                    })
+                    navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Назад") } }
+                )
             }
         ) { pad ->
             Column(Modifier.fillMaxSize().padding(pad).padding(24.dp),
@@ -195,85 +176,43 @@ fun ReaderScreen(
         return
     }
 
-    val hPager = rememberPagerState(
-        initialPage = page.coerceIn(0, maxOf(pages - 1, 0))) {
-        maxOf(pages, 1)
-    }
-    val vPager = rememberPagerState(
-        initialPage = page.coerceIn(0, maxOf(pages - 1, 0))) {
-        maxOf(pages, 1)
-    }
-    val stripState = rememberLazyListState(
-        initialFirstVisibleItemIndex = page.coerceIn(0, maxOf(pages - 1, 0)))
+    val hPager = rememberPagerState(initialPage = page.coerceIn(0, maxOf(pages - 1, 0))) { maxOf(pages, 1) }
+    val vPager = rememberPagerState(initialPage = page.coerceIn(0, maxOf(pages - 1, 0))) { maxOf(pages, 1) }
+    val stripState = rememberLazyListState(initialFirstVisibleItemIndex = page.coerceIn(0, maxOf(pages - 1, 0)))
 
-    // Синхронизация текущей страницы из активного вьювера
     LaunchedEffect(hPager.currentPage, vPager.currentPage) {
         val cur = when (mode) {
             ReadMode.PAGED_LTR, ReadMode.PAGED_RTL -> hPager.currentPage
             ReadMode.PAGED_VERTICAL -> vPager.currentPage
             else -> page
         }
-        if (cur != page && cur in 0 until pages) {
-            page = cur
-            save()
-        }
+        if (cur != page && cur in 0 until pages) { page = cur; save() }
     }
-    // Лента: следим за видимым
     LaunchedEffect(stripState.firstVisibleItemIndex) {
         if (mode == ReadMode.STRIP || mode == ReadMode.STRIP_GAPS) {
             val cur = stripState.firstVisibleItemIndex
-            if (cur != page && cur in 0 until pages) {
-                page = cur
-                save()
-            }
+            if (cur != page && cur in 0 until pages) { page = cur; save() }
         }
     }
 
-    fun goNext() {
-        scope.launch {
-            when (mode) {
-                ReadMode.PAGED_LTR ->
-                    hPager.animateScrollToPage((page + 1).coerceAtMost(pages - 1))
-                ReadMode.PAGED_RTL ->
-                    hPager.animateScrollToPage((page - 1).coerceAtLeast(0))
-                ReadMode.PAGED_VERTICAL ->
-                    vPager.animateScrollToPage((page + 1).coerceAtMost(pages - 1))
-                else -> stripState.animateScrollToItem(
-                    (page + 1).coerceAtMost(pages - 1))
-            }
+    fun goNext() = scope.launch {
+        when (mode) {
+            ReadMode.PAGED_LTR -> hPager.animateScrollToPage((page + 1).coerceAtMost(pages - 1))
+            ReadMode.PAGED_RTL -> hPager.animateScrollToPage((page - 1).coerceAtLeast(0))
+            ReadMode.PAGED_VERTICAL -> vPager.animateScrollToPage((page + 1).coerceAtMost(pages - 1))
+            else -> stripState.animateScrollToItem((page + 1).coerceAtMost(pages - 1))
         }
     }
-
-    fun goPrev() {
-        scope.launch {
-            when (mode) {
-                ReadMode.PAGED_LTR ->
-                    hPager.animateScrollToPage((page - 1).coerceAtLeast(0))
-                ReadMode.PAGED_RTL ->
-                    hPager.animateScrollToPage((page + 1).coerceAtMost(pages - 1))
-                ReadMode.PAGED_VERTICAL ->
-                    vPager.animateScrollToPage((page - 1).coerceAtLeast(0))
-                else -> stripState.animateScrollToItem(
-                    (page - 1).coerceAtLeast(0))
-            }
+    fun goPrev() = scope.launch {
+        when (mode) {
+            ReadMode.PAGED_LTR -> hPager.animateScrollToPage((page - 1).coerceAtLeast(0))
+            ReadMode.PAGED_RTL -> hPager.animateScrollToPage((page + 1).coerceAtMost(pages - 1))
+            ReadMode.PAGED_VERTICAL -> vPager.animateScrollToPage((page - 1).coerceAtLeast(0))
+            else -> stripState.animateScrollToItem((page - 1).coerceAtLeast(0))
         }
     }
-
-    fun prevChapter() {
-        save()
-        if (idx > 0) {
-            idx--
-            page = 0
-        }
-    }
-
-    fun nextChapter() {
-        save()
-        if (idx < chapters.size - 1) {
-            idx++
-            page = 0
-        }
-    }
+    fun prevChapter() { save(); if (idx > 0) { idx--; page = 0 } }
+    fun nextChapter() { save(); if (idx < chapters.size - 1) { idx++; page = 0 } }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -283,19 +222,13 @@ fun ReaderScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text(vm.titleName(titleId),
-                                style = MaterialTheme.typography.titleSmall)
-                            Text(chapter.name,
-                                style = MaterialTheme.typography.bodySmall)
+                            Text(vm.titleName(titleId), style = MaterialTheme.typography.titleSmall)
+                            Text(chapter.name, style = MaterialTheme.typography.bodySmall)
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            save()
-                            onBack()
-                        }) {
-                            Icon(Icons.Default.ArrowBack,
-                                contentDescription = "Назад")
+                        IconButton(onClick = { save(); onBack() }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
                         }
                     })
             }
@@ -304,37 +237,20 @@ fun ReaderScreen(
             if (menuOpen) {
                 Column(Modifier.background(bg).padding(12.dp)) {
                     if (showNum && pages > 0) {
-                        Text("${page + 1} / $pages",
-                            color = Color.White,
-                            modifier = Modifier.align(Alignment.CenterHorizontally))
-                        Slider(
-                            value = page.toFloat(),
-                            onValueChange = { page = it.toInt() },
-                            valueRange = 0f..maxOf(pages - 1, 0).toFloat(),
-                            onValueChangeFinished = {
-                                scope.launch {
-                                    when (mode) {
-                                        ReadMode.PAGED_LTR, ReadMode.PAGED_RTL ->
-                                            hPager.scrollToPage(page)
-                                        ReadMode.PAGED_VERTICAL ->
-                                            vPager.scrollToPage(page)
-                                        else -> stripState.scrollToItem(page)
-                                    }
-                                    save()
+                        Text("${page + 1} / $pages", color = Color.White, modifier = Modifier.align(Alignment.CenterHorizontally))
+                        Slider(value = page.toFloat(), onValueChange = { page = it.toInt() }, valueRange = 0f..maxOf(pages - 1, 0).toFloat(),
+                            onValueChangeFinished = { scope.launch {
+                                when (mode) {
+                                    ReadMode.PAGED_LTR, ReadMode.PAGED_RTL -> hPager.scrollToPage(page)
+                                    ReadMode.PAGED_VERTICAL -> vPager.scrollToPage(page)
+                                    else -> stripState.scrollToItem(page)
                                 }
-                            })
+                                save()
+                            }})
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { prevChapter() },
-                            enabled = idx > 0,
-                            modifier = Modifier.weight(1f)
-                        ) { Text("← Глава") }
-                        OutlinedButton(
-                            onClick = { nextChapter() },
-                            enabled = idx < chapters.size - 1,
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Глава →") }
+                        OutlinedButton(onClick = { prevChapter() }, enabled = idx > 0, modifier = Modifier.fillMaxWidth()) { Text("← Глава") }
+                        OutlinedButton(onClick = { nextChapter() }, enabled = idx < chapters.size - 1, modifier = Modifier.fillMaxWidth()) { Text("Глава →") }
                     }
                 }
             }
@@ -342,95 +258,42 @@ fun ReaderScreen(
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad).background(bg)) {
             if (pages == 0) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Готовлю страницы…", color = Color.White)
-                }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Готовлю страницы…", color = Color.White) }
             } else when (mode) {
-                ReadMode.PAGED_LTR -> {
-                    HorizontalPager(state = hPager,
-                        modifier = Modifier.fillMaxSize()) { i ->
-                        PageView(session, i, dtZoom)
-                    }
-                }
-                ReadMode.PAGED_RTL -> {
-                    HorizontalPager(state = hPager, reverseLayout = true,
-                        modifier = Modifier.fillMaxSize()) { i ->
-                        PageView(session, i, dtZoom)
-                    }
-                }
-                ReadMode.PAGED_VERTICAL -> {
-                    VerticalPager(state = vPager,
-                        modifier = Modifier.fillMaxSize()) { i ->
-                        PageView(session, i, dtZoom)
-                    }
-                }
-                ReadMode.STRIP -> {
-                    LazyColumn(state = stripState,
-                        modifier = Modifier.fillMaxSize()) {
-                        items(pages) { i ->
-                            PageView(session, i, dtZoom)
-                        }
-                    }
-                }
-                else -> {
-                    LazyColumn(state = stripState,
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(pages) { i ->
-                            PageView(session, i, dtZoom)
-                        }
-                    }
-                }
+                ReadMode.PAGED_LTR -> HorizontalPager(state = hPager, modifier = Modifier.fillMaxSize()) { i -> PageView(session, i, dtZoom) }
+                ReadMode.PAGED_RTL -> HorizontalPager(state = hPager, reverseLayout = true, modifier = Modifier.fillMaxSize()) { i -> PageView(session, i, dtZoom) }
+                ReadMode.PAGED_VERTICAL -> VerticalPager(state = vPager, modifier = Modifier.fillMaxSize()) { i -> PageView(session, i, dtZoom) }
+                ReadMode.STRIP -> LazyColumn(state = stripState, modifier = Modifier.fillMaxSize()) { items(pages) { i -> PageView(session, i, dtZoom) } }
+                else -> LazyColumn(state = stripState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) { items(pages) { i -> PageView(session, i, dtZoom) } }
             }
             // Меню настроек поверх всего
             if (menuOpen) {
                 Box(
                     Modifier.fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surface)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+                        .clickable { menuOpen = false }
                 ) {
                     Column(
                         Modifier.fillMaxWidth()
                             .padding(top = 56.dp, bottom = 16.dp)
                     ) {
-                        ReaderMenu(vm, titleId, mode,
-                            { menuOpen = false })
+                        ReaderMenu(vm, titleId, mode, { menuOpen = false })
                     }
                 }
             }
-            // Зоны касания: лево/право — листать, центр — меню по долгому нажатию
+            // Зоны касания: лево/право — листать, центр — меню только по долгому нажатию
             if (!zonesOff && pages > 0 && !menuOpen) {
                 Row(Modifier.fillMaxSize()) {
-                    Box(Modifier.weight(1f).fillMaxSize()
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember {
-                                MutableInteractionSource()
-                            }
-                        ) { goPrev() })
-                    Box(Modifier.weight(1f).fillMaxSize()
+                    Box(Modifier.fillMaxWidth().weight(1f).clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { goPrev() })
+                    Box(Modifier.fillMaxWidth().weight(1f)
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onLongPress = { menuOpen = true },
-                                onDoubleTap = {
-                                    if (dtZoom) {
-                                        // зум обрабатывается в PageView
-                                    }
-                                }
+                                onDoubleTap = { if (dtZoom) {} }
                             )
                         }
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember {
-                                MutableInteractionSource()
-                            }
-                        ) { menuOpen = true })
-                    Box(Modifier.weight(1f).fillMaxSize()
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember {
-                                MutableInteractionSource()
-                            }
-                        ) { goNext() })
+                        .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { menuOpen = true })
+                    Box(Modifier.fillMaxWidth().weight(1f).clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { goNext() })
                 }
             }
         }
@@ -446,15 +309,10 @@ private fun ReaderMenu(
     onClose: () -> Unit,
 ) {
     val readModeNames = listOf(
-        "По умолчанию",
-        "Постранично (Слева направо)",
-        "Постранично (Справа налево)",
-        "Постранично (Вертикально)",
-        "Длинные страницы",
-        "Длинные страницы с зазорами")
+        "По умолчанию", "Постранично (Слева направо)", "Постранично (Справа налево)",
+        "Постранично (Вертикально)", "Длинные страницы", "Длинные страницы с зазорами")
     val orientNames = listOf("По умолчанию", "Системная", "Портретная", "Альбомная")
-    val zonesNames = listOf("По умолчанию", "L-образная", "Kindle-подобная",
-        "По краям", "Справа и слева", "Отключено")
+    val zonesNames = listOf("По умолчанию", "L-образная", "Kindle-подобная", "По краям", "Справа и слева", "Отключено")
     val navPosNames = listOf("Нет", "Горизонтально", "Вертикально", "Обеоси")
 
     var menuTab by remember { mutableStateOf(0) }
@@ -471,7 +329,7 @@ private fun ReaderMenu(
             .background(surface, RoundedCornerShape(16.dp))
     ) {
         // Вкладки в верхней части
-        Row(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             TabButton("Режим чтения", menuTab == 0) { menuTab = 0 }
             TabButton("Основные", menuTab == 1) { menuTab = 1 }
             TabButton("Пользователь...", menuTab == 2) { menuTab = 2 }
@@ -490,109 +348,45 @@ private fun ReaderMenu(
                     SectionHeader("Для этой серии")
                     SubHeader("Режим чтения")
                     readModeNames.forEachIndexed { i, name ->
-                        ModernOptionButton(
-                            title = name,
-                            selected = currentMode == i,
-                            onClick = { vm.store.setReadMode(i) }
-                        )
+                        ModernOptionButton(title = name, selected = currentMode == i, onClick = { vm.store.setReadMode(i) })
                     }
                     SectionHeader("Ориентация")
                     orientNames.forEachIndexed { i, name ->
-                        ModernOptionButton(
-                            title = name,
-                            selected = vm.store.orientation() == i,
-                            onClick = { vm.store.setOrientation(i) }
-                        )
+                        ModernOptionButton(title = name, selected = vm.store.orientation() == i, onClick = { vm.store.setOrientation(i) })
                     }
                 }
                 1 -> {
                     SectionHeader("Длинные страницы")
                     zonesNames.forEachIndexed { i, name ->
-                        ModernOptionButton(
-                            title = name,
-                            selected = vm.store.tapZones() == i,
-                            onClick = { vm.store.setTapZones(i) }
-                        )
+                        ModernOptionButton(title = name, selected = vm.store.tapZones() == i, onClick = { vm.store.setTapZones(i) })
                     }
                     SectionHeader("Зоны касания наоборот")
                     navPosNames.forEachIndexed { i, name ->
-                        ModernOptionButton(
-                            title = name,
-                            selected = false,
-                            onClick = { /* подробные настройки зон */ }
-                        )
+                        ModernOptionButton(title = name, selected = false, onClick = { /* подробные настройки зон */ })
                     }
                     SectionHeader("Боковой отступ")
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Slider(
-                            value = 0f,
-                            onValueChange = {},
-                            valueRange = 0f..100f
-                        )
-                        Text("0 %", style = MaterialTheme.typography.bodySmall,
-                            color = onSurface.copy(alpha = 0.7f))
+                        Slider(value = 0f, onValueChange = {}, valueRange = 0f..100f)
+                        Text("0 %", style = MaterialTheme.typography.bodySmall, color = onSurface.copy(alpha = 0.7f))
                     }
                 }
                 2 -> {
                     SectionHeader("Цвет фона")
-                    listOf("Чёрный" to 0, "Серый" to 1, "Белый" to 2,
-                        "Автоматический" to 3).forEach { (name, v) ->
-                        ModernOptionButton(
-                            title = name,
-                            selected = vm.store.bgColor() == v,
-                            onClick = { vm.store.setBgColor(v) }
-                        )
+                    listOf("Чёрный" to 0, "Серый" to 1, "Белый" to 2, "Автоматический" to 3).forEach { (name, v) ->
+                        ModernOptionButton(title = name, selected = vm.store.bgColor() == v, onClick = { vm.store.setBgColor(v) })
                     }
-                    ModernCheckboxRow(
-                        title = "Номер страницы",
-                        checked = vm.store.pageNumber(),
-                        onChange = { vm.store.setPageNumber(it) }
-                    )
-                    ModernCheckboxRow(
-                        title = "Использовать вертикальную навигацию глав в длинных страницах",
-                        checked = false,
-                        onChange = { }
-                    )
-                    ModernCheckboxRow(
-                        title = "Полноэкранный режим",
-                        checked = vm.store.fullscreen(),
-                        onChange = { vm.store.setFullscreen(it) }
-                    )
-                    ModernCheckboxRow(
-                        title = "Показывать содержание в вырезанной области",
-                        checked = false,
-                        onChange = { }
-                    )
-                    ModernCheckboxRow(
-                        title = "Не выключать экран",
-                        checked = vm.store.keepScreen(),
-                        onChange = { vm.store.setKeepScreen(it) }
-                    )
-                    ModernCheckboxRow(
-                        title = "Показать действия при долгом нажатии",
-                        checked = true,
-                        onChange = { }
-                    )
-                    ModernCheckboxRow(
-                        title = "Переход между главами",
-                        checked = true,
-                        onChange = { }
-                    )
-                    ModernCheckboxRow(
-                        title = "Анимированные переходы страниц",
-                        checked = true,
-                        onChange = { }
-                    )
-                    ModernCheckboxRow(
-                        title = "Мигать при смене страницы",
-                        checked = false,
-                        onChange = { }
-                    )
+                    ModernCheckboxRow(title = "Номер страницы", checked = vm.store.pageNumber(), onChange = { vm.store.setPageNumber(it) })
+                    ModernCheckboxRow(title = "Использовать вертикальную навигацию глав в длинных страницах", checked = false, onChange = {})
+                    ModernCheckboxRow(title = "Полноэкранный режим", checked = vm.store.fullscreen(), onChange = { vm.store.setFullscreen(it) })
+                    ModernCheckboxRow(title = "Показывать содержание в вырезанной области", checked = false, onChange = {})
+                    ModernCheckboxRow(title = "Не выключать экран", checked = vm.store.keepScreen(), onChange = { vm.store.setKeepScreen(it) })
+                    ModernCheckboxRow(title = "Показать действия при долгом нажатии", checked = true, onChange = {})
+                    ModernCheckboxRow(title = "Переход между главами", checked = true, onChange = {})
+                    ModernCheckboxRow(title = "Анимированные переходы страниц", checked = true, onChange = {})
+                    ModernCheckboxRow(title = "Мигать при смене страницы", checked = false, onChange = {})
                 }
             }
             Box(Modifier.height(24.dp))
@@ -603,43 +397,31 @@ private fun ReaderMenu(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.End
         ) {
-            OutlinedButton(onClick = onClose) {
-                Text("Закрыть")
-            }
+            OutlinedButton(onClick = onClose) { Text("Закрыть") }
         }
     }
 }
 
-/** Кнопка вкладки в верхнем меню. */
 @Composable
 private fun TabButton(title: String, selected: Boolean, onClick: () -> Unit) {
     val primary = MaterialTheme.colorScheme.primary
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
-    Box(
+    Column(
         Modifier
-            .fillMaxWidth()
             .padding(horizontal = 4.dp)
             .clickable { onClick() },
-        contentAlignment = Alignment.BottomCenter
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (selected) primary else onSurfaceVariant)
-            if (selected) {
-                Box(
-                    Modifier.width(24.dp).height(3.dp)
-                        .background(primary)
-                )
-            }
+        Text(title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (selected) primary else onSurfaceVariant)
+        if (selected) {
+            Box(Modifier.width(24.dp).height(3.dp).background(primary))
         }
     }
 }
 
-/** Заголовок раздела с акцентом. */
 @Composable
 private fun SectionHeader(text: String) {
     Box(
@@ -647,26 +429,18 @@ private fun SectionHeader(text: String) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Text(text, style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-/** Подзаголовок группы опций. */
 @Composable
 private fun SubHeader(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
 }
 
-/** Современная кнопка опции с карточкой. */
 @Composable
-private fun ModernOptionButton(
-    title: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
+private fun ModernOptionButton(title: String, selected: Boolean, onClick: () -> Unit) {
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurface
     Box(
@@ -674,131 +448,62 @@ private fun ModernOptionButton(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 5.dp)
             .clickable { onClick() }
-            .background(
-                if (selected) primary.copy(alpha = 0.12f)
-                else Color.Transparent
-            )
-            .border(
-                if (selected) 1.dp else 0.dp,
-                primary,
-                shape = RoundedCornerShape(10.dp)
-            ),
+            .background(if (selected) primary.copy(alpha = 0.12f) else Color.Transparent)
+            .border(if (selected) 1.dp else 0.dp, primary, shape = RoundedCornerShape(10.dp)),
         contentAlignment = Alignment.Center
     ) {
         Row(Modifier.fillMaxWidth()) {
-            Text(title, style = MaterialTheme.typography.bodyMedium,
-                color = if (selected) primary else onSurface,
-                modifier = Modifier.fillMaxWidth())
-            if (selected) {
-                Icon(Icons.Default.Check, contentDescription = null,
-                    tint = primary)
-            }
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = if (selected) primary else onSurface, modifier = Modifier.fillMaxWidth())
+            if (selected) Icon(Icons.Default.Check, contentDescription = null, tint = primary)
         }
     }
 }
 
-/** Современная строка с чекбоксом. */
 @Composable
-private fun ModernCheckboxRow(
-    title: String,
-    checked: Boolean,
-    onChange: (Boolean) -> Unit,
-) {
+private fun ModernCheckboxRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurface
     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier
-                .width(26.dp).height(26.dp)
-                .border(
-                    2.dp,
-                    if (checked) primary else surfaceVariant,
-                    shape = RoundedCornerShape(6.dp)
-                )
+            Modifier.width(26.dp).height(26.dp)
+                .border(2.dp, if (checked) primary else surfaceVariant, shape = RoundedCornerShape(6.dp))
                 .background(if (checked) primary else Color.Transparent)
                 .clickable { onChange(!checked) },
             contentAlignment = Alignment.Center
         ) {
-            if (checked) {
-                Icon(Icons.Default.Check, contentDescription = null,
-                    tint = Color.White, modifier = Modifier.width(16.dp).height(16.dp))
-            }
+            if (checked) Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.width(16.dp).height(16.dp))
         }
-        Box(Modifier.fillMaxWidth()) {
-            Text(title, style = MaterialTheme.typography.bodyMedium,
-                color = onSurface,
-                modifier = Modifier.padding(start = 12.dp))
-        }
+        Box(Modifier.fillMaxWidth()) { Text(title, style = MaterialTheme.typography.bodyMedium, color = onSurface, modifier = Modifier.padding(start = 12.dp)) }
     }
 }
 
-/** Разделитель. */
 @Composable
-private fun Divider() {
-    Box(Modifier.fillMaxWidth().height(1.dp)
-        .background(MaterialTheme.colorScheme.outlineVariant))
-}
+private fun Divider() { Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant)) }
 
-/** Одна страница: декодирование по требованию + двойной тап-зум. */
 @Composable
-private fun PageView(
-    session: ChapterSession?,
-    index: Int,
-    dtZoom: Boolean,
-) {
-    var bmp by remember(session, index) {
-        mutableStateOf<ImageBitmap?>(null)
-    }
+private fun PageView(session: ChapterSession?, index: Int, dtZoom: Boolean) {
+    var bmp by remember(session, index) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(session, index) {
-        bmp = withContext(Dispatchers.IO) {
-            val b = session?.let { decodePage(it, index) }
-            b?.asImageBitmap()
-        }
+        bmp = withContext(Dispatchers.IO) { val b = session?.let { decodePage(it, index) }; b?.asImageBitmap() }
     }
     var zoom by remember(session, index) { mutableFloatStateOf(1f) }
     var offX by remember(session, index) { mutableFloatStateOf(0f) }
     var offY by remember(session, index) { mutableFloatStateOf(0f) }
     val b = bmp
     if (b == null) {
-        Box(Modifier.fillMaxSize().aspectRatio(3f / 4f),
-            contentAlignment = Alignment.Center) {
-            Text("…", color = Color.Gray)
-        }
+        Box(Modifier.fillMaxSize().aspectRatio(3f / 4f), contentAlignment = Alignment.Center) { Text("…", color = Color.Gray) }
     } else {
-        var mod: Modifier = Modifier.fillMaxSize()
-            .graphicsLayer(
-                scaleX = zoom, scaleY = zoom,
-                translationX = offX, translationY = offY)
+        var mod: Modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = zoom, scaleY = zoom, translationX = offX, translationY = offY)
         if (dtZoom) {
-            mod = mod.pointerInput(session, index) {
-                detectTapGestures(onDoubleTap = {
-                    if (zoom > 1f) {
-                        zoom = 1f
-                        offX = 0f
-                        offY = 0f
-                    } else {
-                        zoom = 2.2f
-                    }
-                })
-            }
+            mod = mod.pointerInput(session, index) { detectTapGestures(onDoubleTap = { if (zoom > 1f) { zoom = 1f; offX = 0f; offY = 0f } else { zoom = 2.2f } }) }
         }
         if (zoom > 1f) {
-            mod = mod.pointerInput(session, index) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    offX += drag.x
-                    offY += drag.y
-                }
-            }
+            mod = mod.pointerInput(session, index) { detectDragGestures { change, drag -> change.consume(); offX += drag.x; offY += drag.y } }
         }
-        Image(b, contentDescription = "Стр. ${index + 1}",
-            contentScale = ContentScale.FillWidth,
-            modifier = mod)
+        Image(b, contentDescription = "Стр. ${index + 1}", contentScale = ContentScale.FillWidth, modifier = mod)
     }
 }
