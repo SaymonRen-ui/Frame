@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -281,30 +283,24 @@ fun ReaderScreen(
                     }
                 }
             }
-            // Зоны касания: обработка на весь экран через pointerInput
+            // Зоны касания: лево/право — листать, центр — меню по долгому нажатию
             if (!zonesOff && pages > 0 && !menuOpen) {
-                Box(Modifier.fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onPress = { offset ->
-                                val x = offset.x
-                                val width = size.width
-                                if (x < width * 0.33f) {
-                                    goPrev()
-                                } else if (x > width * 0.66f) {
-                                    goNext()
-                                } else {
-                                    menuOpen = true
-                                }
-                            }
-                        )
-                    })
+                Row(Modifier.fillMaxSize()) {
+                    Box(Modifier.fillMaxWidth(0.33f).clickable { goPrev() })
+                    Box(Modifier.fillMaxWidth(0.34f)
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onLongPress = { menuOpen = true }
+                            )
+                        })
+                    Box(Modifier.fillMaxWidth(0.33f).clickable { goNext() })
+                }
             }
         }
     }
 }
 
-/** Меню настроек читалки (современный дизайн, как в Mihon). */
+/** Меню настроек читалки (как в Mihon). */
 @Composable
 private fun ReaderMenu(
     vm: LibraryViewModel,
@@ -321,11 +317,12 @@ private fun ReaderMenu(
 
     var menuTab by remember { mutableStateOf(0) }
 
+    val surface = Color(0xFF1E1E1E) // тёмный фон меню как в Mihon
+    val surfaceVariant = Color(0xFF2A2A2E)
     val primary = MaterialTheme.colorScheme.primary
-    val surface = MaterialTheme.colorScheme.surface
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
-    val outline = MaterialTheme.colorScheme.outlineVariant
+    val onSurface = Color.White
+    val onSurfaceVariant = Color(0xFFB0B0B0)
+    val outline = Color(0xFF3A3A3A)
 
     Column(
         Modifier
@@ -374,7 +371,7 @@ private fun ReaderMenu(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Slider(value = 0f, onValueChange = {}, valueRange = 0f..100f)
-                        Text("0 %", style = MaterialTheme.typography.bodySmall, color = onSurface.copy(alpha = 0.7f))
+                        Text("0 %", style = MaterialTheme.typography.bodySmall, color = onSurfaceVariant)
                     }
                 }
                 2 -> {
@@ -409,7 +406,7 @@ private fun ReaderMenu(
 @Composable
 private fun TabButton(title: String, selected: Boolean, onClick: () -> Unit) {
     val primary = MaterialTheme.colorScheme.primary
-    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val onSurfaceVariant = Color(0xFFB0B0B0)
     Column(
         Modifier
             .padding(horizontal = 4.dp)
@@ -433,27 +430,38 @@ private fun SectionHeader(text: String) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text, style = MaterialTheme.typography.titleMedium, color = Color(0xFFB0B0B0))
     }
 }
 
 @Composable
 private fun SubHeader(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    Text(text, style = MaterialTheme.typography.titleMedium, color = Color(0xFFB0B0B0),
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
 }
 
 @Composable
-private fun ModernOptionButton(title: String, selected: Boolean, onClick: () -> Unit) {
+private fun ModernOptionButton(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     val primary = MaterialTheme.colorScheme.primary
-    val onSurface = MaterialTheme.colorScheme.onSurface
+    val onSurface = Color.White
     Box(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 5.dp)
             .clickable { onClick() }
-            .background(if (selected) primary.copy(alpha = 0.12f) else Color.Transparent)
-            .border(if (selected) 1.dp else 0.dp, primary, shape = RoundedCornerShape(10.dp)),
+            .background(
+                if (selected) primary.copy(alpha = 0.12f)
+                else Color.Transparent
+            )
+            .border(
+                if (selected) 1.dp else 0.dp,
+                primary,
+                shape = RoundedCornerShape(10.dp)
+            ),
         contentAlignment = Alignment.Center
     ) {
         Row(Modifier.fillMaxWidth()) {
@@ -464,22 +472,33 @@ private fun ModernOptionButton(title: String, selected: Boolean, onClick: () -> 
 }
 
 @Composable
-private fun ModernCheckboxRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun ModernCheckboxRow(
+    title: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
     val primary = MaterialTheme.colorScheme.primary
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+    val onSurface = Color.White
+    val surfaceVariant = Color(0xFFB0B0B0)
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier.width(26.dp).height(26.dp)
-                .border(2.dp, if (checked) primary else surfaceVariant, shape = RoundedCornerShape(6.dp))
+            Modifier
+                .size(26.dp)
+                .border(
+                    2.dp,
+                    if (checked) primary else surfaceVariant,
+                    shape = RoundedCornerShape(6.dp)
+                )
                 .background(if (checked) primary else Color.Transparent)
                 .clickable { onChange(!checked) },
             contentAlignment = Alignment.Center
         ) {
-            if (checked) Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.width(16.dp).height(16.dp))
+            if (checked) Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
         }
         Box(Modifier.fillMaxWidth()) { Text(title, style = MaterialTheme.typography.bodyMedium, color = onSurface, modifier = Modifier.padding(start = 12.dp)) }
     }
