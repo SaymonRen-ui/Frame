@@ -123,7 +123,7 @@ fun TitleScreen(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = { Text(name) },
+                title = { Text("") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Назад")
@@ -249,16 +249,43 @@ fun TitleScreen(
                         }
                     }
 
-                    // Описание
-                    if (metaEdit.description.isNotBlank()) {
-                        Text(metaEdit.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3)
-                    } else {
-                        Text("Без описания",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // Описание / рейтинг / отзыв — только в режиме просмотра
+                    if (!editingMeta) {
+                        if (metaEdit.description.isNotBlank()) {
+                            Text(metaEdit.description,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 3)
+                        } else {
+                            Text("Без описания",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        if (metaEdit.rating > 0) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                (1..5).forEach { star ->
+                                    val filled = star <= metaEdit.rating.toInt()
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = if (filled)
+                                            MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(" ${"%.1f".format(metaEdit.rating)} / 5",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
+                        if (metaEdit.review.isNotBlank()) {
+                            Text("Отзыв: ${metaEdit.review}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 3)
+                        }
                     }
 
                     // Кнопка редактирования мета
@@ -288,45 +315,47 @@ fun TitleScreen(
                         }
                     }
 
-                    // Редактируемые поля
+                    // Редактируемые поля — только в режиме редактирования
                     if (editingMeta) {
-                        OutlinedTextField(
-                            value = metaEdit.description,
-                            onValueChange = { metaEdit = metaEdit.copy(description = it) },
-                            label = { Text("Описание") },
-                            singleLine = false,
-                            maxLines = 3,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Рейтинг: ${"%.1f".format(metaEdit.rating)} / 5",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f))
-                            (1..5).forEach { star ->
-                                IconButton(
-                                    onClick = {
-                                        metaEdit = metaEdit.copy(rating = star.toDouble())
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = metaEdit.description,
+                                onValueChange = { metaEdit = metaEdit.copy(description = it) },
+                                label = { Text("Описание") },
+                                singleLine = false,
+                                maxLines = 5,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Рейтинг: ${"%.1f".format(metaEdit.rating)} / 5",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f))
+                                (1..5).forEach { star ->
+                                    IconButton(
+                                        onClick = {
+                                            metaEdit = metaEdit.copy(rating = star.toDouble())
+                                        }
+                                    ) {
+                                        val filled = star <= metaEdit.rating.toInt()
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = null,
+                                            tint = if (filled)
+                                                MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
-                                ) {
-                                    val filled = star <= metaEdit.rating.toInt()
-                                    Icon(
-                                        imageVector = Icons.Default.Star,
-                                        contentDescription = null,
-                                        tint = if (filled)
-                                            MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
                                 }
                             }
+                            OutlinedTextField(
+                                value = metaEdit.review,
+                                onValueChange = { metaEdit = metaEdit.copy(review = it) },
+                                label = { Text("Отзыв") },
+                                singleLine = false,
+                                maxLines = 5,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
-                        OutlinedTextField(
-                            value = metaEdit.review,
-                            onValueChange = { metaEdit = metaEdit.copy(review = it) },
-                            label = { Text("Отзыв") },
-                            singleLine = false,
-                            maxLines = 3,
-                            modifier = Modifier.fillMaxWidth()
-                        )
                     }
                 }
             }
