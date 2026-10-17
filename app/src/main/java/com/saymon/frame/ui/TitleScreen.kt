@@ -87,8 +87,9 @@ fun TitleScreen(
     }
 
     var editingMeta by remember { mutableStateOf(false) }
-    var sortChapters by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
+    var mainMenuOpen by remember { mutableStateOf(false) }
+    var sortByName by remember { mutableStateOf(true) }
 
     val pickImage = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -108,10 +109,10 @@ fun TitleScreen(
     val readChapters = chapters.count { vm.progress(titleId, it.uri) > 0 }
     val progressPct = if (totalChapters > 0) readChapters.toFloat() / totalChapters else 0f
 
-    // Читаем вкладки свежие из store после каждого изменения
-    var tabsRefresh by remember { mutableStateOf(0) }
+    // Обновляем вкладки из store
+    var tabsTick by remember { mutableStateOf(0) }
     LaunchedEffect(mine) {
-        tabsRefresh = vm.libTick
+        tabsTick = vm.libTick
     }
 
     Scaffold(
@@ -126,11 +127,21 @@ fun TitleScreen(
                 },
                 actions = {
                     // Сортировка глав
-                    IconButton(onClick = { sortChapters = !sortChapters }) {
-                        Icon(
-                            imageVector = if (sortChapters) Icons.Default.Sort else Icons.Default.Sort,
-                            contentDescription = "Сортировка глав"
+                    DropdownMenu(
+                        expanded = sortMenuOpen,
+                        onDismissRequest = { sortMenuOpen = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("По имени А–Я") },
+                            onClick = { sortByName = true; sortMenuOpen = false }
                         )
+                        DropdownMenuItem(
+                            text = { Text("По имени Я–А") },
+                            onClick = { sortByName = false; sortMenuOpen = false }
+                        )
+                    }
+                    IconButton(onClick = { sortMenuOpen = !sortMenuOpen }) {
+                        Icon(imageVector = Icons.Default.Sort, contentDescription = "Сортировка глав")
                     }
                     // Добавить главы
                     IconButton(onClick = { pickCbz.launch(arrayOf("*/*")) }) {
@@ -138,19 +149,19 @@ fun TitleScreen(
                     }
                     // Еще: обновить главы, изменить категорию
                     DropdownMenu(
-                        expanded = menuOpen,
-                        onDismissRequest = { menuOpen = false }
+                        expanded = mainMenuOpen,
+                        onDismissRequest = { mainMenuOpen = false }
                     ) {
                         DropdownMenuItem(
                             text = { Text("Обновить главы") },
-                            onClick = { vm.refresh(); menuOpen = false }
+                            onClick = { vm.refresh(); mainMenuOpen = false }
                         )
                         DropdownMenuItem(
                             text = { Text("Изменить категорию") },
-                            onClick = { menuOpen = false }
+                            onClick = { mainMenuOpen = false }
                         )
                     }
-                    IconButton(onClick = { menuOpen = !menuOpen }) {
+                    IconButton(onClick = { mainMenuOpen = !mainMenuOpen }) {
                         Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Ещё")
                     }
                 }
@@ -161,7 +172,7 @@ fun TitleScreen(
             Modifier.fillMaxSize().padding(pad).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // --- Обложка + мета (всегда видны) ---
+            // --- Обложка + мета ---
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -192,37 +203,35 @@ fun TitleScreen(
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(name, style = MaterialTheme.typography.titleLarge)
-                        if (editingMeta) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                TextButton(
-                                    onClick = {
-                                        vm.setTitleMeta(titleId, metaEdit)
-                                        editingMeta = false
-                                    }
-                                ) { Text("Сохранить") }
-                                TextButton(
-                                    onClick = {
-                                        metaEdit = meta
-                                        editingMeta = false
-                                    }
-                                ) { Text("Отмена") }
-                            }
-                        } else {
-                            IconButton(
+                    // Название — только здесь (в топбаре уже есть)
+                    Text(name, style = MaterialTheme.typography.titleLarge)
+
+                    if (editingMeta) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(
+                                onClick = {
+                                    vm.setTitleMeta(titleId, metaEdit)
+                                    editingMeta = false
+                                }
+                            ) { Text("Сохранить") }
+                            TextButton(
                                 onClick = {
                                     metaEdit = meta
-                                    editingMeta = true
+                                    editingMeta = false
                                 }
-                            ) {
-                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Редактировать")
+                            ) { Text("Отмена") }
+                        }
+                    } else {
+                        IconButton(
+                            onClick = {
+                                metaEdit = meta
+                                editingMeta = true
                             }
+                        ) {
+                            Icon(imageVector = Icons.Default.Edit, contentDescription = "Редактировать")
                         }
                     }
+
                     // Описание — всегда видно
                     if (metaEdit.description.isNotBlank()) {
                         Text(metaEdit.description,
@@ -230,6 +239,7 @@ fun TitleScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2)
                     }
+
                     // Рейтинг — всегда видно
                     if (metaEdit.rating > 0) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -248,6 +258,7 @@ fun TitleScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+
                     // Отзыв — всегда видно
                     if (metaEdit.review.isNotBlank()) {
                         Text("Отзыв: ${metaEdit.review}",
@@ -255,6 +266,7 @@ fun TitleScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2)
                     }
+
                     // Редактируемые поля — только в режиме редактирования
                     if (editingMeta) {
                         OutlinedTextField(
@@ -336,7 +348,7 @@ fun TitleScreen(
 
             // --- Главы ---
             Text("Главы", style = MaterialTheme.typography.titleSmall)
-            val sortedChapters = if (sortChapters) chapters.sortedBy { it.name } else chapters
+            val sortedChapters = if (sortByName) chapters.sortedBy { it.name } else chapters.sortedByDescending { it.name }
             LazyColumn(
                 modifier = Modifier.fillMaxWidth()
             ) {
