@@ -281,13 +281,24 @@ fun ReaderScreen(
                     }
                 }
             }
-            // Зоны касания: лево/право — листать, центр — меню по тапу
+            // Зоны касания: обработка на весь экран через pointerInput
             if (!zonesOff && pages > 0 && !menuOpen) {
-                Row(Modifier.fillMaxSize()) {
-                    Box(Modifier.fillMaxWidth(0.33f).clickable { goPrev() })
-                    Box(Modifier.fillMaxWidth(0.34f).clickable { menuOpen = true })
-                    Box(Modifier.fillMaxWidth(0.33f).clickable { goNext() })
-                }
+                Box(Modifier.fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onPress = { offset ->
+                                val x = offset.x
+                                val width = size.width
+                                if (x < width * 0.33f) {
+                                    goPrev()
+                                } else if (x > width * 0.66f) {
+                                    goNext()
+                                } else {
+                                    menuOpen = true
+                                }
+                            }
+                        )
+                    })
             }
         }
     }
