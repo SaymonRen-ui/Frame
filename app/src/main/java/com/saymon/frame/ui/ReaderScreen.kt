@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,6 +28,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -435,7 +437,7 @@ fun ReaderScreen(
     }
 }
 
-/** Меню настроек читалки (как в Mihon). */
+/** Меню настроек читалки (современный дизайн, как в Mihon). */
 @Composable
 private fun ReaderMenu(
     vm: LibraryViewModel,
@@ -455,84 +457,28 @@ private fun ReaderMenu(
         "По краям", "Справа и слева", "Отключено")
     val navPosNames = listOf("Нет", "Горизонтально", "Вертикально", "Обеоси")
 
-    var menuTab by remember { mutableStateOf(0) } // 0 чтение, 1 основные, 2 пользователь
+    var menuTab by remember { mutableStateOf(0) }
+
+    val primary = MaterialTheme.colorScheme.primary
+    val surface = MaterialTheme.colorScheme.surface
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+    val outline = MaterialTheme.colorScheme.outlineVariant
 
     Column(
-        Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        Modifier
+            .fillMaxWidth()
+            .background(surface, RoundedCornerShape(16.dp))
     ) {
-        // Вкладки
+        // Вкладки в верхней части
         Row(Modifier.fillMaxWidth()) {
-            Box(
-                Modifier.weight(1f)
-                    .padding(horizontal = 4.dp)
-                    .clickable { menuTab = 0 },
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text("Режим чтения",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (menuTab == 0) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (menuTab == 0) {
-                        Box(
-                            Modifier.width(24.dp).height(3.dp)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                    }
-                }
-            }
-            Box(
-                Modifier.weight(1f)
-                    .padding(horizontal = 4.dp)
-                    .clickable { menuTab = 1 },
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text("Основные",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (menuTab == 1) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (menuTab == 1) {
-                        Box(
-                            Modifier.width(24.dp).height(3.dp)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                    }
-                }
-            }
-            Box(
-                Modifier.weight(1f)
-                    .padding(horizontal = 4.dp)
-                    .clickable { menuTab = 2 },
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text("Пользователь...",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (menuTab == 2) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (menuTab == 2) {
-                        Box(
-                            Modifier.width(24.dp).height(3.dp)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                    }
-                }
-            }
+            TabButton("Режим чтения", menuTab == 0) { menuTab = 0 }
+            TabButton("Основные", menuTab == 1) { menuTab = 1 }
+            TabButton("Пользователь...", menuTab == 2) { menuTab = 2 }
         }
-        Divider()
+        Box(Modifier.fillMaxWidth().height(1.dp).background(outline))
 
-        // Прокручиваемое содержимое меню
+        // Прокручиваемое содержимое
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -542,146 +488,257 @@ private fun ReaderMenu(
             when (menuTab) {
                 0 -> {
                     SectionHeader("Для этой серии")
-                    Text("Режим чтения", style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    SubHeader("Режим чтения")
                     readModeNames.forEachIndexed { i, name ->
-                        ReadingModeButton(name, currentMode == i) {
-                            vm.store.setReadMode(i)
-                        }
+                        ModernOptionButton(
+                            title = name,
+                            selected = currentMode == i,
+                            onClick = { vm.store.setReadMode(i) }
+                        )
                     }
                     SectionHeader("Ориентация")
                     orientNames.forEachIndexed { i, name ->
-                        ReadingModeButton(name, vm.store.orientation() == i) {
-                            vm.store.setOrientation(i)
-                        }
+                        ModernOptionButton(
+                            title = name,
+                            selected = vm.store.orientation() == i,
+                            onClick = { vm.store.setOrientation(i) }
+                        )
                     }
                 }
                 1 -> {
                     SectionHeader("Длинные страницы")
                     zonesNames.forEachIndexed { i, name ->
-                        ReadingModeButton(name, vm.store.tapZones() == i) {
-                            vm.store.setTapZones(i)
-                        }
+                        ModernOptionButton(
+                            title = name,
+                            selected = vm.store.tapZones() == i,
+                            onClick = { vm.store.setTapZones(i) }
+                        )
                     }
                     SectionHeader("Зоны касания наоборот")
                     navPosNames.forEachIndexed { i, name ->
-                        ReadingModeButton(name, false) { /* подробные настройки зон */ }
+                        ModernOptionButton(
+                            title = name,
+                            selected = false,
+                            onClick = { /* подробные настройки зон */ }
+                        )
                     }
                     SectionHeader("Боковой отступ")
-                    Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Slider(
                             value = 0f,
                             onValueChange = {},
-                            valueRange = 0f..100f)
-                        Text("0 %", style = MaterialTheme.typography.bodySmall)
+                            valueRange = 0f..100f
+                        )
+                        Text("0 %", style = MaterialTheme.typography.bodySmall,
+                            color = onSurface.copy(alpha = 0.7f))
                     }
                 }
                 2 -> {
                     SectionHeader("Цвет фона")
                     listOf("Чёрный" to 0, "Серый" to 1, "Белый" to 2,
                         "Автоматический" to 3).forEach { (name, v) ->
-                        ReadingModeButton(name, vm.store.bgColor() == v) {
-                            vm.store.setBgColor(v)
-                        }
+                        ModernOptionButton(
+                            title = name,
+                            selected = vm.store.bgColor() == v,
+                            onClick = { vm.store.setBgColor(v) }
+                        )
                     }
-                    CheckboxRow("Номер страницы", vm.store.pageNumber()) {
-                        vm.store.setPageNumber(it)
-                    }
-                    CheckboxRow("Использовать вертикальную навигацию глав в длинных страницах",
-                        false) { }
-                    CheckboxRow("Полноэкранный режим", vm.store.fullscreen()) {
-                        vm.store.setFullscreen(it)
-                    }
-                    CheckboxRow("Показывать содержание в вырезанной области", false) { }
-                    CheckboxRow("Не выключать экран", vm.store.keepScreen()) {
-                        vm.store.setKeepScreen(it)
-                    }
-                    CheckboxRow("Показать действия при долгом нажатии", true) { }
-                    CheckboxRow("Переход между главами", true) { }
-                    CheckboxRow("Анимированные переходы страниц", true) { }
-                    CheckboxRow("Мигать при смене страницы", false) { }
+                    ModernCheckboxRow(
+                        title = "Номер страницы",
+                        checked = vm.store.pageNumber(),
+                        onChange = { vm.store.setPageNumber(it) }
+                    )
+                    ModernCheckboxRow(
+                        title = "Использовать вертикальную навигацию глав в длинных страницах",
+                        checked = false,
+                        onChange = { }
+                    )
+                    ModernCheckboxRow(
+                        title = "Полноэкранный режим",
+                        checked = vm.store.fullscreen(),
+                        onChange = { vm.store.setFullscreen(it) }
+                    )
+                    ModernCheckboxRow(
+                        title = "Показывать содержание в вырезанной области",
+                        checked = false,
+                        onChange = { }
+                    )
+                    ModernCheckboxRow(
+                        title = "Не выключать экран",
+                        checked = vm.store.keepScreen(),
+                        onChange = { vm.store.setKeepScreen(it) }
+                    )
+                    ModernCheckboxRow(
+                        title = "Показать действия при долгом нажатии",
+                        checked = true,
+                        onChange = { }
+                    )
+                    ModernCheckboxRow(
+                        title = "Переход между главами",
+                        checked = true,
+                        onChange = { }
+                    )
+                    ModernCheckboxRow(
+                        title = "Анимированные переходы страниц",
+                        checked = true,
+                        onChange = { }
+                    )
+                    ModernCheckboxRow(
+                        title = "Мигать при смене страницы",
+                        checked = false,
+                        onChange = { }
+                    )
                 }
             }
             Box(Modifier.height(24.dp))
         }
 
-        Divider()
-        Row(Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.End) {
-            OutlinedButton(onClick = onClose) { Text("Закрыть") }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(outline))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            OutlinedButton(onClick = onClose) {
+                Text("Закрыть")
+            }
         }
     }
 }
 
+/** Кнопка вкладки в верхнем меню. */
+@Composable
+private fun TabButton(title: String, selected: Boolean, onClick: () -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .clickable { onClick() },
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (selected) primary else onSurfaceVariant)
+            if (selected) {
+                Box(
+                    Modifier.width(24.dp).height(3.dp)
+                        .background(primary)
+                )
+            }
+        }
+    }
+}
+
+/** Заголовок раздела с акцентом. */
 @Composable
 private fun SectionHeader(text: String) {
     Box(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Text(text, style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
+/** Подзаголовок группы опций. */
 @Composable
-private fun ReadingModeButton(title: String, selected: Boolean, onClick: () -> Unit) {
+private fun SubHeader(text: String) {
+    Text(text, style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+}
+
+/** Современная кнопка опции с карточкой. */
+@Composable
+private fun ModernOptionButton(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurface
     Box(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = 16.dp, vertical = 5.dp)
             .clickable { onClick() }
-            .background(if (selected) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceContainer)
-            .border(if (selected) 1.dp else 0.dp,
-                MaterialTheme.colorScheme.primary,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+            .background(
+                if (selected) primary.copy(alpha = 0.12f)
+                else Color.Transparent
+            )
+            .border(
+                if (selected) 1.dp else 0.dp,
+                primary,
+                shape = RoundedCornerShape(10.dp)
+            ),
         contentAlignment = Alignment.Center
     ) {
         Row(Modifier.fillMaxWidth()) {
             Text(title, style = MaterialTheme.typography.bodyMedium,
-                color = if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f))
+                color = if (selected) primary else onSurface,
+                modifier = Modifier.fillMaxWidth())
             if (selected) {
                 Icon(Icons.Default.Check, contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary)
+                    tint = primary)
             }
         }
     }
 }
 
+/** Современная строка с чекбоксом. */
 @Composable
-private fun CheckboxRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun ModernCheckboxRow(
+    title: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier.width(30.dp).height(30.dp)
-                .border(2.dp, if (checked) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.outlineVariant)
-                .background(if (checked) MaterialTheme.colorScheme.primary else Color.Transparent)
+            Modifier
+                .width(26.dp).height(26.dp)
+                .border(
+                    2.dp,
+                    if (checked) primary else surfaceVariant,
+                    shape = RoundedCornerShape(6.dp)
+                )
+                .background(if (checked) primary else Color.Transparent)
                 .clickable { onChange(!checked) },
             contentAlignment = Alignment.Center
         ) {
             if (checked) {
                 Icon(Icons.Default.Check, contentDescription = null,
-                    tint = Color.White, modifier = Modifier.width(18.dp).height(18.dp))
+                    tint = Color.White, modifier = Modifier.width(16.dp).height(16.dp))
             }
         }
-        Box(
-            Modifier.fillMaxWidth()
-        ) {
+        Box(Modifier.fillMaxWidth()) {
             Text(title, style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 16.dp))
+                color = onSurface,
+                modifier = Modifier.padding(start = 12.dp))
         }
     }
 }
 
+/** Разделитель. */
 @Composable
 private fun Divider() {
     Box(Modifier.fillMaxWidth().height(1.dp)
