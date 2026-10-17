@@ -281,19 +281,12 @@ fun ReaderScreen(
                     }
                 }
             }
-            // Зоны касания: лево/право — листать, центр — меню только по долгому нажатию
+            // Зоны касания: лево/право — листать, центр — меню по тапу
             if (!zonesOff && pages > 0 && !menuOpen) {
                 Row(Modifier.fillMaxSize()) {
-                    Box(Modifier.fillMaxWidth().weight(1f).clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { goPrev() })
-                    Box(Modifier.fillMaxWidth().weight(1f)
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onLongPress = { menuOpen = true },
-                                onDoubleTap = { if (dtZoom) {} }
-                            )
-                        }
-                        .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { menuOpen = true })
-                    Box(Modifier.fillMaxWidth().weight(1f).clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { goNext() })
+                    Box(Modifier.fillMaxWidth().weight(1f).clickable { goPrev() })
+                    Box(Modifier.fillMaxWidth().weight(1f).clickable { menuOpen = true })
+                    Box(Modifier.fillMaxWidth().weight(1f).clickable { goNext() })
                 }
             }
         }
