@@ -1,12 +1,7 @@
 package com.saymon.frame.core.cbz
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.net.Uri
-import androidx.documentfile.provider.DocumentFile
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.zip.ZipFile
 
@@ -42,26 +37,6 @@ class ChapterSession private constructor(
                 throw IllegalStateException("В CBZ нет картинок")
             }
             return ChapterSession(zip, entries, file)
-        }
-
-        /** Глава по content-URI (копия в кэш). */
-        suspend fun open(
-            context: Context,
-            chapterUri: String,
-            titleId: String,
-        ): ChapterSession = withContext(Dispatchers.IO) {
-            val uri = Uri.parse(chapterUri)
-            val dir = File(context.cacheDir,
-                "cbz/" + titleId.hashCode().toString(16)).also { it.mkdirs() }
-            val name = DocumentFile.fromSingleUri(context, uri)?.name
-                ?: "chapter.cbz"
-            val cache = File(dir, name.replace("/", "_"))
-            if (!cache.exists()) {
-                context.contentResolver.openInputStream(uri)?.use { inp ->
-                    cache.outputStream().use { inp.copyTo(it) }
-                } ?: throw IllegalStateException("Не открылся CBZ")
-            }
-            openFile(cache.absolutePath)
         }
 
         private fun zipEntries(zip: ZipFile): List<String> {
@@ -143,63 +118,8 @@ fun decodeFile(f: File, maxPx: Int): Bitmap? {
     }
 }
 
-/** Обложка произведения: cover.jpg в папке, иначе первая страница первой главы. */
-suspend fun loadCover(
-    context: Context,
-    titleDir: DocumentFile,
-    chapters: List<ChapterInfo>,
-): Bitmap? = withContext(Dispatchers.IO) {
-    try {
-        val cover = titleDir.listFiles().firstOrNull {
-            val n = (it.name ?: "").lowercase()
-            (n == "cover.jpg" || n == "cover.png" || n == "cover.jpeg") && it.isFile
-        }
-        if (cover != null) {
-            return@withContext decodeUri(context, cover.uri, 512)
-        }
-        val first = chapters.firstOrNull() ?: return@withContext null
-        val session = try {
-            ChapterSession.open(context, first.uri, first.titleId)
-        } catch (_: Exception) {
-            return@withContext null
-        }
-        try {
-            val bmp = withContext(Dispatchers.IO) {
-                decodePage(session, 0, 512)
-            }
-            session.close()
-            bmp
-        } catch (_: Exception) {
-            try {
-                session.close()
-            } catch (_: Exception) {
-            }
-            null
-        }
-    } catch (_: Exception) {
-        null
-    }
-}
-
 data class ChapterInfo(
     val titleId: String,
     val uri: String,
     val name: String,
 )
-
-fun decodeUri(context: Context, uri: Uri, maxPx: Int): Bitmap? {
-    return try {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, bounds)
-        }
-        var s = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / s > maxPx) s *= 2
-        context.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null,
-                BitmapFactory.Options().apply { inSampleSize = s })
-        }
-    } catch (_: Exception) {
-        null
-    }
-}

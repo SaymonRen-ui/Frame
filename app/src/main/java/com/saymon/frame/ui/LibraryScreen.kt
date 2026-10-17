@@ -1,7 +1,5 @@
 package com.saymon.frame.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,16 +12,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -57,11 +53,8 @@ import androidx.compose.ui.unit.dp
 fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
     var searching by remember { mutableStateOf(false) }
     var sorting by remember { mutableStateOf(false) }
-    var adding by remember { mutableStateOf(false) }
-    val fullAccess = vm.hasFullAccess()
 
     LaunchedEffect(Unit) {
-        vm.ensureWorkDir()
         vm.refresh()
     }
 
@@ -69,14 +62,10 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = { Text("Фрейм") },
+                title = { Text("Frame") },
                 actions = {
-                    // Обновить данные библиотеки
                     IconButton(onClick = { vm.refresh() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Обновить")
-                    }
-                    IconButton(onClick = { adding = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Новое произведение")
                     }
                     IconButton(onClick = { searching = !searching }) {
                         Icon(Icons.Default.Search, contentDescription = "Поиск")
@@ -95,26 +84,6 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
             )
         }
     ) { pad ->
-        if (adding) {
-            var name by remember { mutableStateOf("") }
-            AlertDialog(
-                onDismissRequest = { adding = false },
-                title = { Text("Новое произведение") },
-                text = {
-                    OutlinedTextField(name, { name = it },
-                        label = { Text("Название") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth())
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        if (vm.addTitle(name)) adding = false
-                    }) { Text("Создать") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { adding = false }) { Text("Отмена") }
-                })
-        }
         Column(Modifier.fillMaxSize().padding(pad)) {
             if (searching) {
                 OutlinedTextField(
@@ -139,26 +108,23 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                         label = { Text(t) })
                 }
             }
-            val libGone = !vm.workDir().isDirectory
-            if (!fullAccess) {
-                // Без полного доступа корень закрыт — ведём в настройки
+            val titles = vm.titles
+            if (titles.isEmpty()) {
                 Column(
                     Modifier.fillMaxSize().padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text("Нужен доступ к файлам",
+                    Text("Тут пусто",
                         style = MaterialTheme.typography.titleLarge)
-                    Text("Библиотека живёт в папке Фрейм в корне устройства — " +
-                        "без доступа её не видно",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Настройки → Доступ к файлам → Расширенный доступ",
+                    Text("Создайте папки с файлами CBZ в корне устройства " +
+                        "(папка Frame) и нажмите Обновить",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            } else if (libGone) {
+            } else {
                 val mapping = remember(vm.libTick) { vm.store.titleTabs() }
                 val hist = remember(vm.libTick) { vm.history() }
-                var list = vm.titles.filter {
+                var list = titles.filter {
                     (vm.search.isBlank() ||
                         it.name.contains(vm.search, ignoreCase = true)) &&
                         (vm.activeTab == "Все" ||
@@ -178,7 +144,7 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                     ) {
                         Text("Тут пусто",
                             style = MaterialTheme.typography.titleLarge)
-                        Text("Папки произведений не найдены",
+                        Text("Ничего не найдено",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
@@ -189,7 +155,7 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(list, key = { it.id }) { t ->
+                        gridItems(list, key = { it.id }) { t ->
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier.clickable { onTitle(t.id) }

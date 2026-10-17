@@ -2,8 +2,6 @@ package com.saymon.frame.ui
 
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -160,7 +158,7 @@ fun SettingsScreen(vm: LibraryViewModel) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Библиотека",
                         style = MaterialTheme.typography.titleMedium)
-                    Text("Папка Фрейм в корне устройства: " +
+                    Text("Папка Frame в корне устройства: " +
                         if (vm.workDir().isDirectory) "на месте"
                         else "нет доступа",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -1,8 +1,6 @@
 package com.saymon.frame.ui
 
 import android.app.Application
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -85,19 +83,11 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         activeTab = t
     }
 
-    /** Создать рабочую папку «Фрейм» в корне устройства. */
-    fun ensureWorkDir() {
-        try {
-            workDir().mkdirs()
-        } catch (_: Exception) {
-        }
-    }
-
-    /** Корень библиотеки: /sdcard/Фрейм. */
+    /** Корень библиотеки: /sdcard/Frame. */
     fun workDir(): java.io.File =
         java.io.File(
             android.os.Environment.getExternalStorageDirectory(),
-            "Фрейм")
+            "Frame")
 
     fun hasFullAccess(): Boolean =
         android.os.Build.VERSION.SDK_INT < 30 ||
@@ -186,63 +176,6 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
                 .orEmpty()
         } catch (_: Exception) {
             emptyList()
-        }
-    }
-
-    /** Новая папка произведения в библиотеке. */
-    fun addTitle(name: String): Boolean {
-        return try {
-            val clean = name.trim().replace("/", "_").take(80)
-            if (clean.isEmpty()) return false
-            java.io.File(workDir(), clean).mkdirs()
-            refresh()
-            true
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    /** Скопировать CBZ в папку произведения. */
-    fun importChapters(titleId: String, uris: List<Uri>) {
-        if (uris.isEmpty()) return
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                try {
-                    val dir = java.io.File(titleId)
-                    for (uri in uris) {
-                        val name = displayName(uri) ?: "глава.cbz"
-                        val safe = name.replace("/", "_")
-                        var dest = java.io.File(dir, safe)
-                        var i = 1
-                        while (dest.exists()) {
-                            val d = safe.lastIndexOf('.')
-                            val b = if (d > 0) safe.substring(0, d) else safe
-                            val e = if (d > 0) safe.substring(d) else ""
-                            dest = java.io.File(dir, "$b ($i)$e")
-                            i++
-                        }
-                        ctx.contentResolver.openInputStream(uri)?.use { inp ->
-                            dest.outputStream().use { inp.copyTo(it) }
-                        }
-                    }
-                } catch (_: Exception) {
-                }
-            }
-            refresh()
-        }
-    }
-
-    private fun displayName(uri: Uri): String? {
-        return try {
-            ctx.contentResolver.query(uri, null, null, null, null)?.use { c ->
-                if (c.moveToFirst()) {
-                    val i = c.getColumnIndex(
-                        android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (i >= 0) c.getString(i) else null
-                } else null
-            }
-        } catch (_: Exception) {
-            null
         }
     }
 
