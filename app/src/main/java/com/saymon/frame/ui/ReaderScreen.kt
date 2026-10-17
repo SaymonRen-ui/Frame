@@ -27,6 +27,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -472,12 +474,12 @@ private fun ReaderMenu(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text("Режим чтения",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = if (menuTab == 0) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant)
                     if (menuTab == 0) {
                         Box(
-                            Modifier.width(24.dp).height(2.dp)
+                            Modifier.width(24.dp).height(3.dp)
                                 .background(MaterialTheme.colorScheme.primary)
                         )
                     }
@@ -494,12 +496,12 @@ private fun ReaderMenu(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text("Основные",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = if (menuTab == 1) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant)
                     if (menuTab == 1) {
                         Box(
-                            Modifier.width(24.dp).height(2.dp)
+                            Modifier.width(24.dp).height(3.dp)
                                 .background(MaterialTheme.colorScheme.primary)
                         )
                     }
@@ -516,12 +518,12 @@ private fun ReaderMenu(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text("Пользователь...",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = if (menuTab == 2) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant)
                     if (menuTab == 2) {
                         Box(
-                            Modifier.width(24.dp).height(2.dp)
+                            Modifier.width(24.dp).height(3.dp)
                                 .background(MaterialTheme.colorScheme.primary)
                         )
                     }
@@ -530,69 +532,80 @@ private fun ReaderMenu(
         }
         Divider()
 
-        when (menuTab) {
-            0 -> {
-                SectionHeader("Для этой серии")
-                Text("Режим чтения", style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp))
-                readModeNames.forEachIndexed { i, name ->
-                    ReadingModeButton(name, currentMode == i) {
-                        vm.store.setReadMode(i)
+        // Прокручиваемое содержимое меню
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 8.dp)
+        ) {
+            when (menuTab) {
+                0 -> {
+                    SectionHeader("Для этой серии")
+                    Text("Режим чтения", style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    readModeNames.forEachIndexed { i, name ->
+                        ReadingModeButton(name, currentMode == i) {
+                            vm.store.setReadMode(i)
+                        }
+                    }
+                    SectionHeader("Ориентация")
+                    orientNames.forEachIndexed { i, name ->
+                        ReadingModeButton(name, vm.store.orientation() == i) {
+                            vm.store.setOrientation(i)
+                        }
                     }
                 }
-                SectionHeader("Ориентация")
-                orientNames.forEachIndexed { i, name ->
-                    ReadingModeButton(name, vm.store.orientation() == i) {
-                        vm.store.setOrientation(i)
+                1 -> {
+                    SectionHeader("Длинные страницы")
+                    zonesNames.forEachIndexed { i, name ->
+                        ReadingModeButton(name, vm.store.tapZones() == i) {
+                            vm.store.setTapZones(i)
+                        }
                     }
+                    SectionHeader("Зоны касания наоборот")
+                    navPosNames.forEachIndexed { i, name ->
+                        ReadingModeButton(name, false) { /* подробные настройки зон */ }
+                    }
+                    SectionHeader("Боковой отступ")
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Slider(
+                            value = 0f,
+                            onValueChange = {},
+                            valueRange = 0f..100f)
+                        Text("0 %", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                2 -> {
+                    SectionHeader("Цвет фона")
+                    listOf("Чёрный" to 0, "Серый" to 1, "Белый" to 2,
+                        "Автоматический" to 3).forEach { (name, v) ->
+                        ReadingModeButton(name, vm.store.bgColor() == v) {
+                            vm.store.setBgColor(v)
+                        }
+                    }
+                    CheckboxRow("Номер страницы", vm.store.pageNumber()) {
+                        vm.store.setPageNumber(it)
+                    }
+                    CheckboxRow("Использовать вертикальную навигацию глав в длинных страницах",
+                        false) { }
+                    CheckboxRow("Полноэкранный режим", vm.store.fullscreen()) {
+                        vm.store.setFullscreen(it)
+                    }
+                    CheckboxRow("Показывать содержание в вырезанной области", false) { }
+                    CheckboxRow("Не выключать экран", vm.store.keepScreen()) {
+                        vm.store.setKeepScreen(it)
+                    }
+                    CheckboxRow("Показать действия при долгом нажатии", true) { }
+                    CheckboxRow("Переход между главами", true) { }
+                    CheckboxRow("Анимированные переходы страниц", true) { }
+                    CheckboxRow("Мигать при смене страницы", false) { }
                 }
             }
-            1 -> {
-                SectionHeader("Длинные страницы")
-                zonesNames.forEachIndexed { i, name ->
-                    ReadingModeButton(name, vm.store.tapZones() == i) {
-                        vm.store.setTapZones(i)
-                    }
-                }
-                SectionHeader("Зоны касания наоборот")
-                navPosNames.forEachIndexed { i, name ->
-                    ReadingModeButton(name, false) { /* подробные настройки зон */ }
-                }
-                SectionHeader("Боковой отступ")
-                Row(Modifier.padding(horizontal = 16.dp)) {
-                    Slider(
-                        value = 0f,
-                        onValueChange = {},
-                        valueRange = 0f..100f)
-                    Text("0 %", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            2 -> {
-                SectionHeader("Цвет фона")
-                listOf("Чёрный" to 0, "Серый" to 1, "Белый" to 2,
-                    "Автоматический" to 3).forEach { (name, v) ->
-                    ReadingModeButton(name, vm.store.bgColor() == v) {
-                        vm.store.setBgColor(v)
-                    }
-                }
-                CheckboxRow("Номер страницы", vm.store.pageNumber()) {
-                    vm.store.setPageNumber(it)
-                }
-                CheckboxRow("Использовать вертикальную навигацию глав в длинных страницах",
-                    false) { }
-                CheckboxRow("Полноэкранный режим", vm.store.fullscreen()) {
-                    vm.store.setFullscreen(it)
-                }
-                CheckboxRow("Показывать содержание в вырезанной области", false) { }
-                CheckboxRow("Не выключать экран", vm.store.keepScreen()) {
-                    vm.store.setKeepScreen(it)
-                }
-                CheckboxRow("Показать действия при долгом нажатии", true) { }
-                CheckboxRow("Переход между главами", true) { }
-                CheckboxRow("Анимированные переходы страниц", true) { }
-                CheckboxRow("Мигать при смене страницы", false) { }
-            }
+            Box(Modifier.height(24.dp))
         }
+
         Divider()
         Row(Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.End) {
@@ -603,9 +616,14 @@ private fun ReaderMenu(
 
 @Composable
 private fun SectionHeader(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Text(text, style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable
@@ -613,13 +631,19 @@ private fun ReadingModeButton(title: String, selected: Boolean, onClick: () -> U
     Box(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clickable { onClick() },
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clickable { onClick() }
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceContainer)
+            .border(if (selected) 1.dp else 0.dp,
+                MaterialTheme.colorScheme.primary,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
         contentAlignment = Alignment.Center
     ) {
         Row(Modifier.fillMaxWidth()) {
             Text(title, style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f))
             if (selected) {
                 Icon(Icons.Default.Check, contentDescription = null,
@@ -632,19 +656,20 @@ private fun ReadingModeButton(title: String, selected: Boolean, onClick: () -> U
 @Composable
 private fun CheckboxRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier.width(24.dp).height(24.dp)
-                .border(1.5.dp, if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+            Modifier.width(30.dp).height(30.dp)
+                .border(2.dp, if (checked) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.outlineVariant)
                 .background(if (checked) MaterialTheme.colorScheme.primary else Color.Transparent)
                 .clickable { onChange(!checked) },
             contentAlignment = Alignment.Center
         ) {
             if (checked) {
                 Icon(Icons.Default.Check, contentDescription = null,
-                    tint = Color.White, modifier = Modifier.width(14.dp).height(14.dp))
+                    tint = Color.White, modifier = Modifier.width(18.dp).height(18.dp))
             }
         }
         Box(
@@ -652,7 +677,7 @@ private fun CheckboxRow(title: String, checked: Boolean, onChange: (Boolean) -> 
         ) {
             Text(title, style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 12.dp))
+                modifier = Modifier.padding(start = 16.dp))
         }
     }
 }
