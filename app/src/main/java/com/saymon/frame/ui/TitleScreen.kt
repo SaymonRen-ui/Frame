@@ -263,7 +263,10 @@ fun TitleScreen(
                         }
 
                         if (metaEdit.rating > 0) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 (1..5).forEach { star ->
                                     val filled = star <= metaEdit.rating.toInt()
                                     Icon(
@@ -271,7 +274,8 @@ fun TitleScreen(
                                         contentDescription = null,
                                         tint = if (filled)
                                             MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                                 Text(" ${"%.1f".format(metaEdit.rating)} / 5",
@@ -326,25 +330,25 @@ fun TitleScreen(
                                 maxLines = 5,
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text("Рейтинг: ${"%.1f".format(metaEdit.rating)} / 5",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.weight(1f))
+                                    style = MaterialTheme.typography.bodyMedium)
                                 (1..5).forEach { star ->
-                                    IconButton(
-                                        onClick = {
+                                    val filled = star <= metaEdit.rating.toInt()
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = if (filled)
+                                            MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                        .clickable {
                                             metaEdit = metaEdit.copy(rating = star.toDouble())
                                         }
-                                    ) {
-                                        val filled = star <= metaEdit.rating.toInt()
-                                        Icon(
-                                            imageVector = Icons.Default.Star,
-                                            contentDescription = null,
-                                            tint = if (filled)
-                                                MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                    )
                                 }
                             }
                             OutlinedTextField(
