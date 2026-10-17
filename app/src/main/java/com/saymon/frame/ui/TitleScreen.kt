@@ -3,6 +3,7 @@ package com.saymon.frame.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -113,6 +114,7 @@ fun TitleScreen(
 
     val totalChapters = chapters.size
     val readChapters = chapters.count { vm.progress(titleId, it.uri) > 0 }
+    val progressPct = if (totalChapters > 0) readChapters.toFloat() / totalChapters else 0f
 
     val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
 
@@ -262,9 +264,11 @@ fun TitleScreen(
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Text("Добавлено",
+                            Text(
+                                mine.joinToString(", "),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -323,6 +327,9 @@ fun TitleScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 3)
                         }
+
+                        // Круговая диаграмма прогресса
+                        CircularProgress(progress = progressPct)
                     }
 
                     // Кнопка редактирования мета
@@ -481,6 +488,48 @@ fun TitleScreen(
                 }
             }
         }
+    }
+}
+
+/** Круговой индикатор прогресса прочтения. */
+@Composable
+fun CircularProgress(progress: Float) {
+    val sizeDp = 60.dp
+    Box(
+        modifier = Modifier.size(sizeDp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier
+                .size(sizeDp)
+                .background(
+                    Color(
+                        red = MaterialTheme.colorScheme.primary.red,
+                        green = MaterialTheme.colorScheme.primary.green,
+                        blue = MaterialTheme.colorScheme.primary.blue,
+                        alpha = 0.1f
+                    ),
+                    CircleShape
+                )
+        )
+        Box(
+            Modifier
+                .size(sizeDp)
+                .background(
+                    Color(
+                        red = MaterialTheme.colorScheme.primary.red,
+                        green = MaterialTheme.colorScheme.primary.green,
+                        blue = MaterialTheme.colorScheme.primary.blue,
+                        alpha = progress.coerceIn(0f, 1f)
+                    ),
+                    CircleShape
+                )
+        )
+        Text(
+            text = "${(progress * 100).toInt()}%",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }
 
