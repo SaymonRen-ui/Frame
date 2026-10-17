@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -207,11 +208,23 @@ fun TitleScreen(
                     // Название
                     Text(name, style = MaterialTheme.typography.titleLarge)
 
-                    // Автор
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Неизвестный автор",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // Автор (редактируемый)
+                    if (editingMeta) {
+                        OutlinedTextField(
+                            value = metaEdit.author,
+                            onValueChange = { metaEdit = metaEdit.copy(author = it) },
+                            label = { Text("Автор") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                metaEdit.author.ifBlank { "Неизвестный автор" },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     // Статистика
@@ -345,9 +358,9 @@ fun TitleScreen(
                                             MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(16.dp)
-                                        .clickable {
-                                            metaEdit = metaEdit.copy(rating = star.toDouble())
-                                        }
+                                            .clickable {
+                                                metaEdit = metaEdit.copy(rating = star.toDouble())
+                                            }
                                     )
                                 }
                             }
@@ -372,9 +385,6 @@ fun TitleScreen(
             ) {
                 Text("$totalChapters глав",
                     style = MaterialTheme.typography.titleMedium)
-                Text("Отутствовало $totalChapters главы",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             // --- Главы ---
@@ -387,36 +397,41 @@ fun TitleScreen(
                     val displayName = ch.name.removeSuffix(".cbz").removeSuffix(".CBZ")
                     val fileDate = java.io.File(ch.uri).lastModified()
                     val dateStr = dateFormat.format(Date(fileDate))
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable { onRead(ch.uri) }
                     ) {
-                        OutlinedButton(
-                            onClick = { onRead(ch.uri) },
-                            modifier = Modifier.weight(1f)
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(horizontalAlignment = Alignment.Start) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
                                 Text(displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.weight(1f))
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1)
                                 Text(dateStr,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                        }
-                        if (read) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        } else {
-                            Box(
-                                Modifier.size(24.dp)
-                                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            )
+                            if (read) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            } else {
+                                Box(
+                                    Modifier.size(24.dp)
+                                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                )
+                            }
                         }
                     }
                 }

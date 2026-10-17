@@ -72,7 +72,8 @@ class Store(context: Context) {
             TitleMeta(
                 description = o.optString("description", ""),
                 rating = o.optDouble("rating", 0.0),
-                review = o.optString("review", "")
+                review = o.optString("review", ""),
+                author = o.optString("author", "")
             )
         } catch (_: Exception) {
             TitleMeta()
@@ -85,6 +86,7 @@ class Store(context: Context) {
             o.put("description", meta.description)
             o.put("rating", meta.rating)
             o.put("review", meta.review)
+            o.put("author", meta.author)
             prefs().edit { putString("meta|$titleId", o.toString()) }
         } catch (_: Exception) {
         }
@@ -204,9 +206,10 @@ object Orient {
     const val LANDSCAPE = 2
 }
 
-/** Метаданные произведения: описание, рейтинг, отзыв. */
+/** Метаданные произведения: описание, рейтинг, отзыв, автор. */
 data class TitleMeta(
     val description: String = "",
     val rating: Double = 0.0,
-    val review: String = ""
+    val review: String = "",
+    val author: String = ""
 )
