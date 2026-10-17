@@ -22,9 +22,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -46,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,7 +79,7 @@ fun TitleScreen(
     var metaEdit by remember { mutableStateOf(meta) }
 
     val tabs = remember(vm.libTick) { vm.store.tabs() }
-    val mine = remember(vm.libTick) { vm.titleTabs(titleId).toMutableSet() }
+    val mine by remember { mutableStateOf(vm.titleTabs(titleId).toMutableSet()) }
     val cover = vm.covers[titleId]
 
     val last = remember(vm.libTick) {
@@ -86,6 +88,7 @@ fun TitleScreen(
 
     var editingMeta by remember { mutableStateOf(false) }
     var sortChapters by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
 
     val pickImage = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -105,6 +108,12 @@ fun TitleScreen(
     val readChapters = chapters.count { vm.progress(titleId, it.uri) > 0 }
     val progressPct = if (totalChapters > 0) readChapters.toFloat() / totalChapters else 0f
 
+    // Читаем вкладки свежие из store после каждого изменения
+    var tabsRefresh by remember { mutableStateOf(0) }
+    LaunchedEffect(mine) {
+        tabsRefresh = vm.libTick
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
@@ -116,8 +125,12 @@ fun TitleScreen(
                     }
                 },
                 actions = {
+                    // Сортировка глав
                     IconButton(onClick = { sortChapters = !sortChapters }) {
-                        Icon(imageVector = Icons.Default.Sort, contentDescription = "Сортировка глав")
+                        Icon(
+                            imageVector = if (sortChapters) Icons.Default.Sort else Icons.Default.Sort,
+                            contentDescription = "Сортировка глав"
+                        )
                     }
                     // Добавить главы
                     IconButton(onClick = { pickCbz.launch(arrayOf("*/*")) }) {
@@ -125,19 +138,19 @@ fun TitleScreen(
                     }
                     // Еще: обновить главы, изменить категорию
                     DropdownMenu(
-                        expanded = editingMeta,
-                        onDismissRequest = { editingMeta = false }
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false }
                     ) {
                         DropdownMenuItem(
                             text = { Text("Обновить главы") },
-                            onClick = { vm.refresh(); editingMeta = false }
+                            onClick = { vm.refresh(); menuOpen = false }
                         )
                         DropdownMenuItem(
                             text = { Text("Изменить категорию") },
-                            onClick = { editingMeta = false }
+                            onClick = { menuOpen = false }
                         )
                     }
-                    IconButton(onClick = { editingMeta = !editingMeta }) {
+                    IconButton(onClick = { menuOpen = !menuOpen }) {
                         Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Ещё")
                     }
                 }
@@ -148,7 +161,7 @@ fun TitleScreen(
             Modifier.fillMaxSize().padding(pad).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // --- Обложка + мета (всегда visibles, редактируются инлайн) ---
+            // --- Обложка + мета (всегда видны) ---
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -185,18 +198,20 @@ fun TitleScreen(
                     ) {
                         Text(name, style = MaterialTheme.typography.titleLarge)
                         if (editingMeta) {
-                            TextButton(
-                                onClick = {
-                                    vm.setTitleMeta(titleId, metaEdit)
-                                    editingMeta = false
-                                }
-                            ) { Text("Сохранить") }
-                            TextButton(
-                                onClick = {
-                                    metaEdit = meta
-                                    editingMeta = false
-                                }
-                            ) { Text("Отмена") }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                TextButton(
+                                    onClick = {
+                                        vm.setTitleMeta(titleId, metaEdit)
+                                        editingMeta = false
+                                    }
+                                ) { Text("Сохранить") }
+                                TextButton(
+                                    onClick = {
+                                        metaEdit = meta
+                                        editingMeta = false
+                                    }
+                                ) { Text("Отмена") }
+                            }
                         } else {
                             IconButton(
                                 onClick = {
@@ -208,6 +223,39 @@ fun TitleScreen(
                             }
                         }
                     }
+                    // Описание — всегда видно
+                    if (metaEdit.description.isNotBlank()) {
+                        Text(metaEdit.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2)
+                    }
+                    // Рейтинг — всегда видно
+                    if (metaEdit.rating > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            (1..5).forEach { star ->
+                                val filled = star <= metaEdit.rating.toInt()
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = if (filled)
+                                        MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(" ${"%.1f".format(metaEdit.rating)} / 5",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    // Отзыв — всегда видно
+                    if (metaEdit.review.isNotBlank()) {
+                        Text("Отзыв: ${metaEdit.review}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2)
+                    }
+                    // Редактируемые поля — только в режиме редактирования
                     if (editingMeta) {
                         OutlinedTextField(
                             value = metaEdit.description,
@@ -246,36 +294,6 @@ fun TitleScreen(
                             maxLines = 3,
                             modifier = Modifier.fillMaxWidth()
                         )
-                    } else {
-                        if (metaEdit.description.isNotBlank()) {
-                            Text(metaEdit.description,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2)
-                        }
-                        if (metaEdit.rating > 0) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                (1..5).forEach { star ->
-                                    val filled = star <= metaEdit.rating.toInt()
-                                    Icon(
-                                        imageVector = Icons.Default.Star,
-                                        contentDescription = null,
-                                        tint = if (filled)
-                                            MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Text(" ${"%.1f".format(metaEdit.rating)} / 5",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                        if (metaEdit.review.isNotBlank()) {
-                            Text("Отзыв: ${metaEdit.review}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2)
-                        }
                     }
                 }
             }
@@ -305,6 +323,7 @@ fun TitleScreen(
                         selected = has,
                         onClick = {
                             vm.toggleTitleTab(titleId, t)
+                            vm.refresh()
                             if (has) mine.remove(t) else mine.add(t)
                         },
                         label = { Text(t) },
@@ -323,14 +342,27 @@ fun TitleScreen(
             ) {
                 items(sortedChapters, key = { it.uri }) { ch ->
                     val read = vm.progress(titleId, ch.uri) > 0
-                    OutlinedButton(
-                        onClick = { onRead(ch.uri) },
-                        modifier = Modifier.fillMaxWidth()
+                    val displayName = ch.name.removeSuffix(".cbz").removeSuffix(".CBZ")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            (if (read) "✓ " else "") + ch.name,
+                        OutlinedButton(
+                            onClick = { onRead(ch.uri) },
                             modifier = Modifier.weight(1f)
-                        )
+                        ) {
+                            Text(
+                                (if (read) "✓ " else "") + displayName,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (read) {
+                            Icon(
+                                imageVector = Icons.Default.Done,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
