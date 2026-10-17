@@ -249,8 +249,8 @@ fun ReaderScreen(
                             }})
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { prevChapter() }, enabled = idx > 0, modifier = Modifier.fillMaxWidth()) { Text("← Глава") }
-                        OutlinedButton(onClick = { nextChapter() }, enabled = idx < chapters.size - 1, modifier = Modifier.fillMaxWidth()) { Text("Глава →") }
+                        OutlinedButton(onClick = { prevChapter() }, enabled = idx > 0, modifier = Modifier.fillMaxWidth(0.5f)) { Text("← Глава") }
+                        OutlinedButton(onClick = { nextChapter() }, enabled = idx < chapters.size - 1, modifier = Modifier.fillMaxWidth(0.5f)) { Text("Глава →") }
                     }
                 }
             }
@@ -284,9 +284,9 @@ fun ReaderScreen(
             // Зоны касания: лево/право — листать, центр — меню по тапу
             if (!zonesOff && pages > 0 && !menuOpen) {
                 Row(Modifier.fillMaxSize()) {
-                    Box(Modifier.fillMaxWidth().weight(1f).clickable { goPrev() })
-                    Box(Modifier.fillMaxWidth().weight(1f).clickable { menuOpen = true })
-                    Box(Modifier.fillMaxWidth().weight(1f).clickable { goNext() })
+                    Box(Modifier.fillMaxWidth(0.33f).clickable { goPrev() })
+                    Box(Modifier.fillMaxWidth(0.34f).clickable { menuOpen = true })
+                    Box(Modifier.fillMaxWidth(0.33f).clickable { goNext() })
                 }
             }
         }
