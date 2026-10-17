@@ -169,6 +169,9 @@ class Store(context: Context) {
     fun keepScreen(): Boolean = prefs().getBoolean("keep_screen", true)
     fun setKeepScreen(v: Boolean) = prefs().edit { putBoolean("keep_screen", v) }
 
+    fun fullscreen(): Boolean = prefs().getBoolean("fullscreen", false)
+    fun setFullscreen(v: Boolean) = prefs().edit { putBoolean("fullscreen", v) }
+
     /** Размер кэша распакованных глав (байт) — для кнопки очистки. */
     fun cacheSize(): Long {
         return try {

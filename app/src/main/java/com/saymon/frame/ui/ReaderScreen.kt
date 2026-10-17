@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.pm.ActivityInfo
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -16,8 +17,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -26,6 +29,7 @@ import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,6 +60,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import com.saymon.frame.core.cbz.ChapterInfo
 import com.saymon.frame.core.cbz.ChapterSession
 import com.saymon.frame.core.cbz.decodePage
 import com.saymon.frame.data.Orient
@@ -68,6 +73,7 @@ import kotlinx.coroutines.withContext
 /**
  * Читалка главы: лента / постранично LTR-RTL-вертикально,
  * зоны касания, двойной тап-зум, номер страницы, фон.
+ * Долгое нажатие по центру — меню настроек (как в Mihon).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,12 +102,21 @@ fun ReaderScreen(
         else -> Color.Black
     }
 
-    // Ориентация + не гасить экран
+    // Ориентация + не гасить экран + полноэкранный режим
     LaunchedEffect(Unit) {
         (context as? Activity)?.requestedOrientation = when (vm.store.orientation()) {
             Orient.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             Orient.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+        val win = (context as? Activity)?.window
+        if (vm.store.fullscreen()) {
+            win?.decorView?.systemUiVisibility = (
+                android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                    android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
+        } else {
+            win?.decorView?.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
         }
     }
     DisposableEffect(Unit) {
@@ -112,6 +127,7 @@ fun ReaderScreen(
             v.keepScreenOn = old
             (context as? Activity)?.requestedOrientation =
                 ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            v.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
         }
     }
 
@@ -142,7 +158,8 @@ fun ReaderScreen(
     var page by remember(chapter?.uri) {
         mutableIntStateOf(vm.progress(titleId, chapter?.uri.orEmpty()))
     }
-    var menu by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var menuTab by remember { mutableStateOf(0) } // 0 чтение, 1 основные, 2 пользователь
 
     fun save() {
         val ch = chapter ?: return
@@ -259,7 +276,7 @@ fun ReaderScreen(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = bg,
         topBar = {
-            if (menu) {
+            if (menuOpen) {
                 TopAppBar(
                     title = {
                         Column {
@@ -281,7 +298,7 @@ fun ReaderScreen(
             }
         },
         bottomBar = {
-            if (menu) {
+            if (menuOpen) {
                 Column(Modifier.background(bg).padding(12.dp)) {
                     if (showNum && pages > 0) {
                         Text("${page + 1} / $pages",
@@ -362,8 +379,23 @@ fun ReaderScreen(
                     }
                 }
             }
-            // Зоны касания: лево/право — листать, центр — меню
-            if (!zonesOff && pages > 0) {
+            // Меню настроек поверх всего
+            if (menuOpen) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(Color(0xFF1A1A1A).copy(alpha = 0.92f))
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .padding(top = 56.dp, bottom = 16.dp)
+                    ) {
+                        ReaderMenu(vm, titleId, mode,
+                            { menuOpen = false })
+                    }
+                }
+            }
+            // Зоны касания: лево/право — листать, центр — меню по долгому нажатию
+            if (!zonesOff && pages > 0 && !menuOpen) {
                 Row(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f).fillMaxSize()
                         .clickable(
@@ -373,12 +405,22 @@ fun ReaderScreen(
                             }
                         ) { goPrev() })
                     Box(Modifier.weight(1f).fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onLongPress = { menuOpen = true },
+                                onDoubleTap = {
+                                    if (dtZoom) {
+                                        // зум обрабатывается в PageView
+                                    }
+                                }
+                            )
+                        }
                         .clickable(
                             indication = null,
                             interactionSource = remember {
                                 MutableInteractionSource()
                             }
-                        ) { menu = !menu })
+                        ) { menuOpen = true })
                     Box(Modifier.weight(1f).fillMaxSize()
                         .clickable(
                             indication = null,
@@ -390,6 +432,209 @@ fun ReaderScreen(
             }
         }
     }
+}
+
+/** Меню настроек читалки (как в Mihon). */
+@Composable
+private fun ReaderMenu(
+    vm: LibraryViewModel,
+    titleId: String,
+    currentMode: Int,
+    onClose: () -> Unit,
+) {
+    val readModeNames = listOf(
+        "По умолчанию",
+        "Постранично (Слева направо)",
+        "Постранично (Справа налево)",
+        "Постранично (Вертикально)",
+        "Длинные страницы",
+        "Длинные страницы с зазорами")
+    val orientNames = listOf("По умолчанию", "Системная", "Портретная", "Альбомная")
+    val zonesNames = listOf("По умолчанию", "L-образная", "Kindle-подобная",
+        "По краям", "Справа и слева", "Отключено")
+    val navPosNames = listOf("Нет", "Горизонтально", "Вертикально", "Обе оси")
+
+    var menuTab by remember { mutableStateOf(0) } // 0 чтение, 1 основные, 2 пользователь
+
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Вкладки
+        Row(Modifier.fillMaxWidth()) {
+            Box(
+                Modifier.weight(1f)
+                    .padding(horizontal = 4.dp)
+                    .clickable { menuTab = 0 },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Режим чтения",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (menuTab == 0) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = if (menuTab == 0) Modifier.background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                    else Modifier)
+            }
+            Box(
+                Modifier.weight(1f)
+                    .padding(horizontal = 4.dp)
+                    .clickable { menuTab = 1 },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Основные",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (menuTab == 1) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = if (menuTab == 1) Modifier.background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                    else Modifier)
+            }
+            Box(
+                Modifier.weight(1f)
+                    .padding(horizontal = 4.dp)
+                    .clickable { menuTab = 2 },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Пользователь...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (menuTab == 2) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = if (menuTab == 2) Modifier.background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                    else Modifier)
+            }
+        }
+        Divider()
+
+        when (menuTab) {
+            0 -> {
+                Text("Для этой серии", style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp))
+                Text("Режим чтения", style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp))
+                readModeNames.forEachIndexed { i, name ->
+                    ReadingModeButton(name, currentMode == i) {
+                        vm.store.setReadMode(i)
+                    }
+                }
+                Text("Ориентация", style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp))
+                orientNames.forEachIndexed { i, name ->
+                    ReadingModeButton(name, vm.store.orientation() == i) {
+                        vm.store.setOrientation(i)
+                    }
+                }
+            }
+            1 -> {
+                Text("Длинные страницы", style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp))
+                zonesNames.forEachIndexed { i, name ->
+                    ReadingModeButton(name, vm.store.tapZones() == i) {
+                        vm.store.setTapZones(i)
+                    }
+                }
+                Text("Зоны касания наоборот", style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp))
+                navPosNames.forEachIndexed { i, name ->
+                    ReadingModeButton(name, false) { /* подробные настройки зон */ }
+                }
+                Text("Боковой отступ", style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp))
+                Row(Modifier.padding(horizontal = 16.dp)) {
+                    Slider(
+                        value = 0f,
+                        onValueChange = {},
+                        valueRange = 0f..100f)
+                    Text("0 %", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            2 -> {
+                Text("Цвет фона", style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp))
+                listOf("Чёрный" to 0, "Серый" to 1, "Белый" to 2,
+                    "Автоматический" to 3).forEach { (name, v) ->
+                    ReadingModeButton(name, vm.store.bgColor() == v) {
+                        vm.store.setBgColor(v)
+                    }
+                }
+                CheckboxRow("Номер страницы", vm.store.pageNumber()) {
+                    vm.store.setPageNumber(it)
+                }
+                CheckboxRow("Использовать вертикальную навигацию глав в длинных страницах",
+                    false) { }
+                CheckboxRow("Полноэкранный режим", vm.store.fullscreen()) {
+                    vm.store.setFullscreen(it)
+                }
+                CheckboxRow("Показывать содержание в вырезанной области", false) { }
+                CheckboxRow("Не выключать экран", vm.store.keepScreen()) {
+                    vm.store.setKeepScreen(it)
+                }
+                CheckboxRow("Показать действия при долгом нажатии", true) { }
+                CheckboxRow("Переход между главами", true) { }
+                CheckboxRow("Анимированные переходы страниц", true) { }
+                CheckboxRow("Мигать при смене страницы", false) { }
+            }
+        }
+        Divider()
+        Row(Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.End) {
+            OutlinedButton(onClick = onClose) { Text("Закрыть") }
+        }
+    }
+}
+
+@Composable
+private fun ReadingModeButton(title: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable { onClick() },
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(title, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f))
+            if (selected) {
+                Icon(Icons.Default.Check, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CheckboxRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.width(24.dp).height(24.dp)
+                .border(1.5.dp, if (checked) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant)
+                .background(if (checked) MaterialTheme.colorScheme.primary
+                else Color.Transparent)
+                .clickable { onChange(!checked) },
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                Icon(Icons.Default.Check, contentDescription = null,
+                    tint = Color.White, modifier = Modifier.width(14.dp).height(14.dp))
+            }
+        }
+        Text(title, style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f).padding(start = 12.dp))
+    }
+}
+
+@Composable
+private fun Divider() {
+    Box(Modifier.fillMaxWidth().height(1.dp)
+        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)))
 }
 
 /** Одна страница: декодирование по требованию + двойной тап-зум. */
