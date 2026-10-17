@@ -306,22 +306,7 @@ fun TitleScreen(
                     }
 
                     // Кнопка редактирования мета
-                    if (editingMeta) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(
-                                onClick = {
-                                    vm.setTitleMeta(titleId, metaEdit)
-                                    editingMeta = false
-                                }
-                            ) { Text("Сохранить") }
-                            TextButton(
-                                onClick = {
-                                    metaEdit = meta
-                                    editingMeta = false
-                                }
-                            ) { Text("Отмена") }
-                        }
-                    } else {
+                    if (!editingMeta) {
                         IconButton(
                             onClick = {
                                 metaEdit = meta
@@ -334,7 +319,7 @@ fun TitleScreen(
 
                     // Редактируемые поля — только в режиме редактирования
                     if (editingMeta) {
-                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedTextField(
                                 value = metaEdit.description,
                                 onValueChange = { metaEdit = metaEdit.copy(description = it) },
@@ -372,6 +357,24 @@ fun TitleScreen(
                                 maxLines = 5,
                                 modifier = Modifier.fillMaxWidth()
                             )
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .padding(top = 12.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        vm.setTitleMeta(titleId, metaEdit)
+                                        editingMeta = false
+                                    }
+                                ) { Text("Сохранить") }
+                                TextButton(
+                                    onClick = {
+                                        metaEdit = meta
+                                        editingMeta = false
+                                    }
+                                ) { Text("Отмена") }
+                            }
                         }
                     }
                 }
