@@ -60,7 +60,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import com.saymon.frame.core.cbz.ChapterInfo
 import com.saymon.frame.core.cbz.ChapterSession
 import com.saymon.frame.core.cbz.decodePage
 import com.saymon.frame.data.Orient
@@ -383,7 +382,7 @@ fun ReaderScreen(
             if (menuOpen) {
                 Box(
                     Modifier.fillMaxSize()
-                        .background(Color(0xFF1A1A1A).copy(alpha = 0.92f))
+                        .background(MaterialTheme.colorScheme.surface)
                 ) {
                     Column(
                         Modifier.fillMaxWidth()
@@ -452,13 +451,13 @@ private fun ReaderMenu(
     val orientNames = listOf("По умолчанию", "Системная", "Портретная", "Альбомная")
     val zonesNames = listOf("По умолчанию", "L-образная", "Kindle-подобная",
         "По краям", "Справа и слева", "Отключено")
-    val navPosNames = listOf("Нет", "Горизонтально", "Вертикально", "Обе оси")
+    val navPosNames = listOf("Нет", "Горизонтально", "Вертикально", "Обеоси")
 
     var menuTab by remember { mutableStateOf(0) } // 0 чтение, 1 основные, 2 пользователь
 
     Column(
         Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // Вкладки
         Row(Modifier.fillMaxWidth()) {
@@ -466,51 +465,74 @@ private fun ReaderMenu(
                 Modifier.weight(1f)
                     .padding(horizontal = 4.dp)
                     .clickable { menuTab = 0 },
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.BottomCenter
             ) {
-                Text("Режим чтения",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (menuTab == 0) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = if (menuTab == 0) Modifier.background(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                    else Modifier)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("Режим чтения",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (menuTab == 0) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (menuTab == 0) {
+                        Box(
+                            Modifier.width(24.dp).height(2.dp)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
+                }
             }
             Box(
                 Modifier.weight(1f)
                     .padding(horizontal = 4.dp)
                     .clickable { menuTab = 1 },
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.BottomCenter
             ) {
-                Text("Основные",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (menuTab == 1) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = if (menuTab == 1) Modifier.background(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                    else Modifier)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("Основные",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (menuTab == 1) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (menuTab == 1) {
+                        Box(
+                            Modifier.width(24.dp).height(2.dp)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
+                }
             }
             Box(
                 Modifier.weight(1f)
                     .padding(horizontal = 4.dp)
                     .clickable { menuTab = 2 },
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.BottomCenter
             ) {
-                Text("Пользователь...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (menuTab == 2) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = if (menuTab == 2) Modifier.background(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                    else Modifier)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("Пользователь...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (menuTab == 2) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (menuTab == 2) {
+                        Box(
+                            Modifier.width(24.dp).height(2.dp)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
+                }
             }
         }
         Divider()
 
         when (menuTab) {
             0 -> {
-                Text("Для этой серии", style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp))
+                SectionHeader("Для этой серии")
                 Text("Режим чтения", style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(horizontal = 16.dp))
                 readModeNames.forEachIndexed { i, name ->
@@ -518,8 +540,7 @@ private fun ReaderMenu(
                         vm.store.setReadMode(i)
                     }
                 }
-                Text("Ориентация", style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp))
+                SectionHeader("Ориентация")
                 orientNames.forEachIndexed { i, name ->
                     ReadingModeButton(name, vm.store.orientation() == i) {
                         vm.store.setOrientation(i)
@@ -527,20 +548,17 @@ private fun ReaderMenu(
                 }
             }
             1 -> {
-                Text("Длинные страницы", style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp))
+                SectionHeader("Длинные страницы")
                 zonesNames.forEachIndexed { i, name ->
                     ReadingModeButton(name, vm.store.tapZones() == i) {
                         vm.store.setTapZones(i)
                     }
                 }
-                Text("Зоны касания наоборот", style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp))
+                SectionHeader("Зоны касания наоборот")
                 navPosNames.forEachIndexed { i, name ->
                     ReadingModeButton(name, false) { /* подробные настройки зон */ }
                 }
-                Text("Боковой отступ", style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp))
+                SectionHeader("Боковой отступ")
                 Row(Modifier.padding(horizontal = 16.dp)) {
                     Slider(
                         value = 0f,
@@ -550,8 +568,7 @@ private fun ReaderMenu(
                 }
             }
             2 -> {
-                Text("Цвет фона", style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp))
+                SectionHeader("Цвет фона")
                 listOf("Чёрный" to 0, "Серый" to 1, "Белый" to 2,
                     "Автоматический" to 3).forEach { (name, v) ->
                     ReadingModeButton(name, vm.store.bgColor() == v) {
@@ -585,13 +602,20 @@ private fun ReaderMenu(
 }
 
 @Composable
+private fun SectionHeader(text: String) {
+    Text(text, style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+}
+
+@Composable
 private fun ReadingModeButton(title: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .clickable { onClick() },
-        contentAlignment = Alignment.CenterStart
+        contentAlignment = Alignment.Center
     ) {
         Row(Modifier.fillMaxWidth()) {
             Text(title, style = MaterialTheme.typography.bodyMedium,
@@ -613,10 +637,8 @@ private fun CheckboxRow(title: String, checked: Boolean, onChange: (Boolean) -> 
     ) {
         Box(
             Modifier.width(24.dp).height(24.dp)
-                .border(1.5.dp, if (checked) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant)
-                .background(if (checked) MaterialTheme.colorScheme.primary
-                else Color.Transparent)
+                .border(1.5.dp, if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+                .background(if (checked) MaterialTheme.colorScheme.primary else Color.Transparent)
                 .clickable { onChange(!checked) },
             contentAlignment = Alignment.Center
         ) {
@@ -625,16 +647,20 @@ private fun CheckboxRow(title: String, checked: Boolean, onChange: (Boolean) -> 
                     tint = Color.White, modifier = Modifier.width(14.dp).height(14.dp))
             }
         }
-        Text(title, style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f).padding(start = 12.dp))
+        Box(
+            Modifier.fillMaxWidth()
+        ) {
+            Text(title, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 12.dp))
+        }
     }
 }
 
 @Composable
 private fun Divider() {
     Box(Modifier.fillMaxWidth().height(1.dp)
-        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)))
+        .background(MaterialTheme.colorScheme.outlineVariant))
 }
 
 /** Одна страница: декодирование по требованию + двойной тап-зум. */
