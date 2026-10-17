@@ -94,6 +94,7 @@ fun TitleScreen(
     var editingMeta by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
     var mainMenuOpen by remember { mutableStateOf(false) }
+    var categoryMenuOpen by remember { mutableStateOf(false) }
     var sortByName by remember { mutableStateOf(true) }
 
     val pickImage = rememberLauncherForActivityResult(
@@ -160,11 +161,30 @@ fun TitleScreen(
                         )
                         DropdownMenuItem(
                             text = { Text("Изменить категорию") },
-                            onClick = { mainMenuOpen = false }
+                            onClick = { mainMenuOpen = false; categoryMenuOpen = true }
                         )
                     }
                     IconButton(onClick = { mainMenuOpen = !mainMenuOpen }) {
                         Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Ещё")
+                    }
+                    DropdownMenu(
+                        expanded = categoryMenuOpen,
+                        onDismissRequest = { categoryMenuOpen = false }
+                    ) {
+                        tabs.forEach { t ->
+                            val selected = mine.contains(t)
+                            DropdownMenuItem(
+                                text = { Text(t) },
+                                leadingIcon = if (selected) {
+                                    { Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                                } else null,
+                                onClick = {
+                                    vm.toggleTitleTab(titleId, t)
+                                    vm.refresh()
+                                    if (selected) mine.remove(t) else mine.add(t)
+                                }
+                            )
+                        }
                     }
                 }
             )
