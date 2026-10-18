@@ -96,17 +96,20 @@ fun ReaderScreen(
         mutableIntStateOf(chapters.indexOfFirst { it.uri == chapterUri }.coerceAtLeast(0))
     }
     val chapter = chapters.getOrNull(idx)
-    val mode = vm.store.readMode()
-    val zonesOff = vm.store.tapZones() == 1 || vm.store.tapZones() == 5
-    val dtZoom = vm.store.doubleTapZoom()
-    val showNum = vm.store.pageNumber()
-    val bg = when (vm.store.bgColor()) {
-        1 -> Color(0xFF2A2A2E)
-        2 -> Color.White
-        else -> Color.Black
+    var settingsTick by remember { mutableStateOf(0) }
+    val mode = remember(settingsTick) { vm.store.readMode() }
+    val zonesOff = remember(settingsTick) { vm.store.tapZones() == 1 || vm.store.tapZones() == 5 }
+    val dtZoom = remember(settingsTick) { vm.store.doubleTapZoom() }
+    val showNum = remember(settingsTick) { vm.store.pageNumber() }
+    val bg = remember(settingsTick) {
+        when (vm.store.bgColor()) {
+            1 -> Color(0xFF2A2A2E)
+            2 -> Color.White
+            else -> Color.Black
+        }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(settingsTick) {
         (context as? Activity)?.requestedOrientation = when (vm.store.orientation()) {
             2, 4, 6 -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             3, 5 -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -121,13 +124,12 @@ fun ReaderScreen(
         } else {
             win?.decorView?.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
         }
+        view.keepScreenOn = vm.store.keepScreen()
     }
     DisposableEffect(Unit) {
         val v = view
-        val old = v.keepScreenOn
-        v.keepScreenOn = vm.store.keepScreen()
         onDispose {
-            v.keepScreenOn = old
+            v.keepScreenOn = false
             (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             v.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
         }
@@ -295,7 +297,7 @@ fun ReaderScreen(
                             .pointerInput(Unit) { detectTapGestures { } }
                     ) {
                         ReaderMenu(
-                            vm, titleId, mode, page, pages,
+                            vm, titleId, mode, page, pages, settingsTick,
                             onPageChange = { page = it.coerceIn(0, maxOf(pages - 1, 0)) },
                             onPageCommit = {
                                 scope.launch {
@@ -307,7 +309,8 @@ fun ReaderScreen(
                                     save()
                                 }
                             },
-                            onClose = { menuOpen = false }
+                            onClose = { menuOpen = false },
+                            onChanged = { settingsTick++ }
                         )
                     }
                 }
@@ -352,9 +355,11 @@ private fun ReaderMenu(
     currentMode: Int,
     page: Int,
     pages: Int,
+    tick: Int,
     onPageChange: (Int) -> Unit,
     onPageCommit: () -> Unit,
     onClose: () -> Unit,
+    onChanged: () -> Unit,
 ) {
     val readModes = listOf(
         "По умолчанию", "Постранично (Слева направо)", "Постранично (Справа налево)",
@@ -407,7 +412,7 @@ private fun ReaderMenu(
                     MenuHeader(c, "Для этой серии")
                     MenuHeader(c, "Режим чтения")
                     readModes.forEachIndexed { i, name ->
-                        MenuOption(c, name, currentMode == i, true) { vm.store.setReadMode(i) }
+                        MenuOption(c, name, currentMode == i, true) { vm.store.setReadMode(i); onChanged() }
                     }
                     MenuHeader(c, "Ориентация")
                     FlowRow(
@@ -416,7 +421,7 @@ private fun ReaderMenu(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         orientations.forEachIndexed { i, name ->
-                            MenuOption(c, name, vm.store.orientation() == i, false) { vm.store.setOrientation(i) }
+                            MenuOption(c, name, vm.store.orientation() == i, false) { vm.store.setOrientation(i); onChanged() }
                         }
                     }
                     MenuHeader(c, "Длинные страницы")
@@ -427,7 +432,7 @@ private fun ReaderMenu(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         zones.forEachIndexed { i, name ->
-                            MenuOption(c, name, vm.store.tapZones() == i, false) { vm.store.setTapZones(i) }
+                            MenuOption(c, name, vm.store.tapZones() == i, false) { vm.store.setTapZones(i); onChanged() }
                         }
                     }
                     MenuHeader(c, "Зоны касания наоборот")
@@ -437,15 +442,15 @@ private fun ReaderMenu(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         navPos.forEachIndexed { i, name ->
-                            MenuOption(c, name, vm.store.i("nav_pos") == i, false) { vm.store.si("nav_pos", i) }
+                            MenuOption(c, name, vm.store.i("nav_pos") == i, false) { vm.store.si("nav_pos", i); onChanged() }
                         }
                     }
-                    MenuSlider(c, "Боковой отступ", vm.store.i("sidebar_pad")) { vm.store.si("sidebar_pad", it) }
-                    MenuCheckbox(c, "Обрезать поля", vm.store.b("crop_borders")) { vm.store.sb("crop_borders", it) }
-                    MenuCheckbox(c, "Разделение широких страниц", vm.store.b("split_wide")) { vm.store.sb("split_wide", it) }
-                    MenuCheckbox(c, "Развернуть широкие страницы под размер экрана", vm.store.b("stretch_wide")) { vm.store.sb("stretch_wide", it) }
-                    MenuCheckbox(c, "Двойное нажатие для увеличения", vm.store.doubleTapZoom()) { vm.store.setDoubleTapZoom(it) }
-                    MenuCheckbox(c, "Отключить уменьшение масштаба", vm.store.b("no_scale_down")) { vm.store.sb("no_scale_down", it) }
+                    MenuSlider(c, "Боковой отступ", vm.store.i("sidebar_pad")) { vm.store.si("sidebar_pad", it); onChanged() }
+                    MenuCheckbox(c, "Обрезать поля", vm.store.b("crop_borders")) { vm.store.sb("crop_borders", it); onChanged() }
+                    MenuCheckbox(c, "Разделение широких страниц", vm.store.b("split_wide")) { vm.store.sb("split_wide", it); onChanged() }
+                    MenuCheckbox(c, "Развернуть широкие страницы под размер экрана", vm.store.b("stretch_wide")) { vm.store.sb("stretch_wide", it); onChanged() }
+                    MenuCheckbox(c, "Двойное нажатие для увеличения", vm.store.doubleTapZoom()) { vm.store.setDoubleTapZoom(it); onChanged() }
+                    MenuCheckbox(c, "Отключить уменьшение масштаба", vm.store.b("no_scale_down")) { vm.store.sb("no_scale_down", it); onChanged() }
                 }
                 1 -> {
                     MenuHeader(c, "Цвет фона")
@@ -455,29 +460,29 @@ private fun ReaderMenu(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         bgColors.forEachIndexed { i, name ->
-                            MenuOption(c, name, vm.store.bgColor() == i, false) { vm.store.setBgColor(i) }
+                            MenuOption(c, name, vm.store.bgColor() == i, false) { vm.store.setBgColor(i); onChanged() }
                         }
                     }
-                    MenuCheckbox(c, "Номер страницы", vm.store.pageNumber()) { vm.store.setPageNumber(it) }
+                    MenuCheckbox(c, "Номер страницы", vm.store.pageNumber()) { vm.store.setPageNumber(it); onChanged() }
                     MenuHeader(c, "Использовать вертикальную навигацию главы в")
                     readModes.forEachIndexed { i, name ->
-                        MenuOption(c, name, vm.store.i("nav_mode") == i, true) { vm.store.si("nav_mode", i) }
+                        MenuOption(c, name, vm.store.i("nav_mode") == i, true) { vm.store.si("nav_mode", i); onChanged() }
                     }
-                    MenuCheckbox(c, "Разместить вертикальную навигацию с левой стороны", vm.store.b("nav_left")) { vm.store.sb("nav_left", it) }
-                    MenuSlider(c, "Высота вертикальной навигации", vm.store.i("nav_height", 65)) { vm.store.si("nav_height", it) }
-                    MenuCheckbox(c, "Полноэкранный режим", vm.store.fullscreen()) { vm.store.setFullscreen(it) }
-                    MenuCheckbox(c, "Показывать содержимое в вырезанной области", vm.store.b("cutout_content", true)) { vm.store.sb("cutout_content", it) }
-                    MenuCheckbox(c, "Не выключать экран", vm.store.keepScreen()) { vm.store.setKeepScreen(it) }
-                    MenuCheckbox(c, "Показать действия при долгом нажатии", vm.store.b("long_tap_actions", true)) { vm.store.sb("long_tap_actions", it) }
-                    MenuCheckbox(c, "Переход между главами", vm.store.b("chapter_transition", true)) { vm.store.sb("chapter_transition", it) }
-                    MenuCheckbox(c, "Анимированные переходы страниц", vm.store.b("anim_transitions", true)) { vm.store.sb("anim_transitions", it) }
-                    MenuCheckbox(c, "Мигать при смене страницы", vm.store.b("flash_page")) { vm.store.sb("flash_page", it) }
+                    MenuCheckbox(c, "Разместить вертикальную навигацию с левой стороны", vm.store.b("nav_left")) { vm.store.sb("nav_left", it); onChanged() }
+                    MenuSlider(c, "Высота вертикальной навигации", vm.store.i("nav_height", 65)) { vm.store.si("nav_height", it); onChanged() }
+                    MenuCheckbox(c, "Полноэкранный режим", vm.store.fullscreen()) { vm.store.setFullscreen(it); onChanged() }
+                    MenuCheckbox(c, "Показывать содержимое в вырезанной области", vm.store.b("cutout_content", true)) { vm.store.sb("cutout_content", it); onChanged() }
+                    MenuCheckbox(c, "Не выключать экран", vm.store.keepScreen()) { vm.store.setKeepScreen(it); onChanged() }
+                    MenuCheckbox(c, "Показать действия при долгом нажатии", vm.store.b("long_tap_actions", true)) { vm.store.sb("long_tap_actions", it); onChanged() }
+                    MenuCheckbox(c, "Переход между главами", vm.store.b("chapter_transition", true)) { vm.store.sb("chapter_transition", it); onChanged() }
+                    MenuCheckbox(c, "Анимированные переходы страниц", vm.store.b("anim_transitions", true)) { vm.store.sb("anim_transitions", it); onChanged() }
+                    MenuCheckbox(c, "Мигать при смене страницы", vm.store.b("flash_page")) { vm.store.sb("flash_page", it); onChanged() }
                 }
                 else -> {
-                    MenuCheckbox(c, "Пользовательская яркость", vm.store.b("user_brightness")) { vm.store.sb("user_brightness", it) }
-                    MenuCheckbox(c, "Пользовательский светофильтр", vm.store.b("user_filter")) { vm.store.sb("user_filter", it) }
-                    MenuCheckbox(c, "Чёрно-белый фильтр", vm.store.b("grayscale")) { vm.store.sb("grayscale", it) }
-                    MenuCheckbox(c, "Цвета наоборот", vm.store.b("invert")) { vm.store.sb("invert", it) }
+                    MenuCheckbox(c, "Пользовательская яркость", vm.store.b("user_brightness")) { vm.store.sb("user_brightness", it); onChanged() }
+                    MenuCheckbox(c, "Пользовательский светофильтр", vm.store.b("user_filter")) { vm.store.sb("user_filter", it); onChanged() }
+                    MenuCheckbox(c, "Чёрно-белый фильтр", vm.store.b("grayscale")) { vm.store.sb("grayscale", it); onChanged() }
+                    MenuCheckbox(c, "Цвета наоборот", vm.store.b("invert")) { vm.store.sb("invert", it); onChanged() }
                 }
             }
         }
@@ -624,7 +629,7 @@ private fun PageView(
         Box(Modifier.fillMaxSize().aspectRatio(3f / 4f), contentAlignment = Alignment.Center) { Text("…", color = Color.Gray) }
     } else {
         var mod: Modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = zoom, scaleY = zoom, translationX = offX, translationY = offY)
-        mod = mod.pointerInput(session, index) {
+        mod = mod.pointerInput(session, index, dtZoom) {
             detectTapGestures(
                 onTap = { off -> if (zoomNow <= 1.01f) cbTap(off.x / size.width) },
                 onLongPress = { cbLong() },
