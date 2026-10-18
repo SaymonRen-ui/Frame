@@ -288,7 +288,7 @@ fun ReaderScreen(
                 Box(Modifier.fillMaxSize()
                     .pointerInput(Unit) {
                         detectTapGestures(
-                            onPress = { offset ->
+                            onTap = { offset ->
                                 val width = size.width
                                 if (offset.x < width * 0.33f) {
                                     goPrev()
