@@ -200,6 +200,36 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Удалить произведение целиком: папку с главами и обложкой. */
+    fun deleteTitle(titleId: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    java.io.File(titleId).deleteRecursively()
+                } catch (_: Exception) {
+                }
+            }
+            covers = covers - titleId
+            store.setTitleTabs(titleId, emptySet())
+            refresh()
+        }
+    }
+
+    /** Удалить только главы (CBZ) произведения, оставив папку и обложку. */
+    fun deleteChapters(titleId: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    java.io.File(titleId).listFiles()?.forEach {
+                        if (it.isFile && it.name.lowercase().endsWith(".cbz")) it.delete()
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            refresh()
+        }
+    }
+
     /** Скопировать CBZ в папку произведения. */
     fun importChapters(titleId: String, uris: List<Uri>) {
         if (uris.isEmpty()) return

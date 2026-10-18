@@ -25,7 +25,7 @@ class Store(context: Context) {
     fun tabs(): List<String> {
         val raw = prefs().getString("tabs", "").orEmpty()
         if (raw.isBlank()) {
-            return listOf("Читаю", "В планах", "Закончил", "Избранное").also {
+            return listOf("Читаю", "В планах", "Закончил", "Брошено", "Избранное").also {
                 prefs().edit { putString("tabs", JSONArray(it).toString()) }
             }
         }

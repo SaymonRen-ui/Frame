@@ -1,7 +1,11 @@
 package com.saymon.frame.ui
 
+import android.app.Activity
+import android.content.Context
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -9,12 +13,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -22,27 +28,27 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -50,16 +56,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.saymon.frame.data.TitleMeta
 import java.io.File
@@ -68,9 +78,9 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Произведение: обложка, название, автор, описание, главы, кнопка начать.
+ * Произведение: обложка, название, автор, описание, рейтинг, отзыв, главы.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TitleScreen(
     vm: LibraryViewModel,
@@ -82,20 +92,15 @@ fun TitleScreen(
     val name = vm.titleName(titleId)
     val chapters = remember(vm.libTick) { vm.chapters(titleId, name) }
     val meta = remember(vm.libTick) { vm.titleMeta(titleId) }
-    var metaEdit by remember { mutableStateOf(meta) }
-
     val tabs = remember(vm.libTick) { vm.store.tabs() }
-    val mine by remember { mutableStateOf(vm.titleTabs(titleId).toMutableSet()) }
+    var mine by remember(vm.libTick) { mutableStateOf(vm.titleTabs(titleId)) }
     val cover = vm.covers[titleId]
-
     val last = remember(vm.libTick) {
         vm.history().firstOrNull { it.titleId == titleId }
     }
 
-    var editingMeta by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
-    var mainMenuOpen by remember { mutableStateOf(false) }
-    var categoryMenuOpen by remember { mutableStateOf(false) }
     var sortByName by remember { mutableStateOf(true) }
 
     val pickImage = rememberLauncherForActivityResult(
@@ -107,7 +112,6 @@ fun TitleScreen(
             vm.refresh()
         }
     }
-
     val pickCbz = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris -> vm.importChapters(titleId, uris) }
@@ -115,13 +119,9 @@ fun TitleScreen(
     val totalChapters = chapters.size
     val readChapters = chapters.count { vm.progress(titleId, it.uri) > 0 }
     val progressPct = if (totalChapters > 0) readChapters.toFloat() / totalChapters else 0f
-
     val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
-
-    var tabsTick by remember { mutableStateOf(0) }
-    LaunchedEffect(mine) {
-        tabsTick = vm.libTick
-    }
+    val sortedChapters = if (sortByName)
+        chapters.sortedBy { it.name } else chapters.sortedByDescending { it.name }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -130,411 +130,348 @@ fun TitleScreen(
                 title = { Text("") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
                     }
                 },
                 actions = {
-                    DropdownMenu(
-                        expanded = sortMenuOpen,
-                        onDismissRequest = { sortMenuOpen = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("По имени А–Я") },
-                            onClick = { sortByName = true; sortMenuOpen = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("По имени Я–А") },
-                            onClick = { sortByName = false; sortMenuOpen = false }
-                        )
+                    DropdownMenu(expanded = sortMenuOpen,
+                        onDismissRequest = { sortMenuOpen = false }) {
+                        DropdownMenuItem(text = { Text("По имени А–Я") },
+                            onClick = { sortByName = true; sortMenuOpen = false })
+                        DropdownMenuItem(text = { Text("По имени Я–А") },
+                            onClick = { sortByName = false; sortMenuOpen = false })
                     }
                     IconButton(onClick = { sortMenuOpen = !sortMenuOpen }) {
-                        Icon(imageVector = Icons.Default.Sort, contentDescription = "Сортировка глав")
+                        Icon(Icons.Default.Sort, contentDescription = "Сортировка глав")
+                    }
+                    IconButton(onClick = { vm.refresh() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Обновить")
                     }
                     IconButton(onClick = { pickCbz.launch(arrayOf("*/*")) }) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = "Добавить главы")
-                    }
-                    DropdownMenu(
-                        expanded = mainMenuOpen,
-                        onDismissRequest = { mainMenuOpen = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Обновить главы") },
-                            onClick = { vm.refresh(); mainMenuOpen = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Изменить категорию") },
-                            onClick = { mainMenuOpen = false; categoryMenuOpen = true }
-                        )
-                    }
-                    IconButton(onClick = { mainMenuOpen = !mainMenuOpen }) {
-                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Ещё")
-                    }
-                    DropdownMenu(
-                        expanded = categoryMenuOpen,
-                        onDismissRequest = { categoryMenuOpen = false }
-                    ) {
-                        tabs.forEach { t ->
-                            val selected = mine.contains(t)
-                            DropdownMenuItem(
-                                text = { Text(t) },
-                                leadingIcon = if (selected) {
-                                    { Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
-                                } else null,
-                                onClick = {
-                                    vm.toggleTitleTab(titleId, t)
-                                    vm.refresh()
-                                    if (selected) mine.remove(t) else mine.add(t)
-                                }
-                            )
-                        }
+                        Icon(Icons.Default.Add, contentDescription = "Добавить главы")
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            if (chapters.isNotEmpty()) {
+                ExtendedFloatingActionButton(
+                    onClick = { onRead(last?.chapterUri ?: chapters.first().uri) },
+                    icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+                    text = { Text(if (last != null) "Продолжить" else "Начать") }
+                )
+            }
         }
     ) { pad ->
-        Column(
-            Modifier.fillMaxSize().padding(pad).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        LazyColumn(
+            Modifier.fillMaxSize().padding(pad),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp)
         ) {
-            // --- Обложка + информация ---
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Card(
-                    modifier = Modifier
-                        .width(120.dp)
-                        .aspectRatio(3f / 4f)
-                        .clickable { pickImage.launch("image/*") }
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(top = 8.dp)
                 ) {
-                    cover?.let {
-                        Image(
-                            bitmap = it,
-                            contentDescription = name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } ?: Box(
-                        Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    // Название
-                    Text(name, style = MaterialTheme.typography.titleLarge)
-
-                    // Автор (редактируемый)
-                    if (editingMeta) {
-                        OutlinedTextField(
-                            value = metaEdit.author,
-                            onValueChange = { metaEdit = metaEdit.copy(author = it) },
-                            label = { Text("Автор") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                metaEdit.author.ifBlank { "Неизвестный автор" },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    // Статистика
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Favorite,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                mine.joinToString(", "),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text("$totalChapters глав",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-
-                    // Описание / рейтинг / отзыв — только в режиме просмотра
-                    if (!editingMeta) {
-                        if (metaEdit.description.isNotBlank()) {
-                            Text(metaEdit.description,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 3)
-                        } else {
-                            Text("Без описания",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-
-                        if (metaEdit.rating > 0) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                (1..5).forEach { star ->
-                                    val filled = star <= metaEdit.rating.toInt()
-                                    Icon(
-                                        imageVector = Icons.Default.Star,
-                                        contentDescription = null,
-                                        tint = if (filled)
-                                            MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                                Text(" ${"%.1f".format(metaEdit.rating)} / 5",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-
-                        if (metaEdit.review.isNotBlank()) {
-                            Text("Отзыв: ${metaEdit.review}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 3)
-                        }
-
-                        // Круговая диаграмма прогресса
-                        CircularProgress(progress = progressPct)
-                    }
-
-                    // Кнопка редактирования мета
-                    if (!editingMeta) {
-                        IconButton(
-                            onClick = {
-                                metaEdit = meta
-                                editingMeta = true
-                            }
-                        ) {
-                            Icon(imageVector = Icons.Default.Edit, contentDescription = "Редактировать")
-                        }
-                    }
-
-                    // Редактируемые поля — только в режиме редактирования
-                    if (editingMeta) {
-                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedTextField(
-                                value = metaEdit.description,
-                                onValueChange = { metaEdit = metaEdit.copy(description = it) },
-                                label = { Text("Описание") },
-                                singleLine = false,
-                                maxLines = 5,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Рейтинг: ${"%.1f".format(metaEdit.rating)} / 5",
-                                    style = MaterialTheme.typography.bodyMedium)
-                                (1..5).forEach { star ->
-                                    val filled = star <= metaEdit.rating.toInt()
-                                    Icon(
-                                        imageVector = Icons.Default.Star,
-                                        contentDescription = null,
-                                        tint = if (filled)
-                                            MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                            .clickable {
-                                                metaEdit = metaEdit.copy(rating = star.toDouble())
-                                            }
-                                    )
-                                }
-                            }
-                            OutlinedTextField(
-                                value = metaEdit.review,
-                                onValueChange = { metaEdit = metaEdit.copy(review = it) },
-                                label = { Text("Отзыв") },
-                                singleLine = false,
-                                maxLines = 5,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth()
-                                    .padding(top = 12.dp),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        vm.setTitleMeta(titleId, metaEdit)
-                                        editingMeta = false
-                                    }
-                                ) { Text("Сохранить") }
-                                TextButton(
-                                    onClick = {
-                                        metaEdit = meta
-                                        editingMeta = false
-                                    }
-                                ) { Text("Отмена") }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- Количество глав ---
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("$totalChapters глав",
-                    style = MaterialTheme.typography.titleMedium)
-            }
-
-            // --- Главы ---
-            val sortedChapters = if (sortByName) chapters.sortedBy { it.name } else chapters.sortedByDescending { it.name }
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(sortedChapters, key = { it.uri }) { ch ->
-                    val read = vm.progress(titleId, ch.uri) > 0
-                    val displayName = ch.name.removeSuffix(".cbz").removeSuffix(".CBZ")
-                    val fileDate = java.io.File(ch.uri).lastModified()
-                    val dateStr = dateFormat.format(Date(fileDate))
                     Card(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable { onRead(ch.uri) }
+                            .width(120.dp)
+                            .aspectRatio(3f / 4f)
+                            .clickable { pickImage.launch("image/*") },
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(displayName,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1)
-                                Text(dateStr,
-                                    style = MaterialTheme.typography.bodySmall,
+                        if (cover != null) {
+                            Image(cover, contentDescription = name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize())
+                        } else {
+                            Box(Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center) {
+                                Text(name.take(2).uppercase(),
+                                    style = MaterialTheme.typography.headlineMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            if (read) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            } else {
-                                Box(
-                                    Modifier.size(24.dp)
-                                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                                )
+                        }
+                    }
+                    Column(
+                        Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(name, style = MaterialTheme.typography.titleLarge)
+                        Text(meta.author.ifBlank { "Неизвестный автор" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("$totalChapters глав · прочитано $readChapters",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            RatingStars(meta.rating)
+                            if (meta.rating > 0) {
+                                Text("${"%.1f".format(meta.rating)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
                 }
             }
 
-            // --- Кнопка Начать ---
-            if (chapters.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+            item {
+                FlowRow(
+                    Modifier.fillMaxWidth().padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Button(
-                        onClick = { onRead(last?.chapterUri ?: chapters.first().uri) },
-                        modifier = Modifier.width(200.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null
-                            )
-                            Text(if (last != null) "Продолжить" else "Начать")
+                    tabs.forEach { tab ->
+                        FilterChip(
+                            selected = mine.contains(tab),
+                            onClick = {
+                                vm.toggleTitleTab(titleId, tab)
+                                mine = vm.titleTabs(titleId)
+                                vm.refresh()
+                            },
+                            label = { Text(tab) })
+                    }
+                }
+            }
+
+            item {
+                InfoBlock(
+                    title = "Описание",
+                    action = {
+                        IconButton(onClick = { editing = true }) {
+                            Icon(Icons.Default.Edit,
+                                contentDescription = "Редактировать",
+                                tint = MaterialTheme.colorScheme.primary)
                         }
+                    }
+                ) {
+                    Text(meta.description.ifBlank { "Без описания" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (meta.description.isBlank())
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        else MaterialTheme.colorScheme.onSurface)
+                    if (meta.review.isNotBlank()) {
+                        Text("Отзыв: ${meta.review}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+            }
+
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgress(progressPct)
+                    Column {
+                        Text("Прогресс чтения",
+                            style = MaterialTheme.typography.titleSmall)
+                        Text("$readChapters из $totalChapters глав",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            item {
+                Text("$totalChapters глав",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
+            }
+
+            items(sortedChapters, key = { it.uri }) { ch ->
+                val read = vm.progress(titleId, ch.uri) > 0
+                val displayName = ch.name.removeSuffix(".cbz").removeSuffix(".CBZ")
+                val dateStr = dateFormat.format(Date(File(ch.uri).lastModified()))
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clickable { onRead(ch.uri) }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier.size(8.dp).background(
+                            MaterialTheme.colorScheme.primary, CircleShape))
+                    Column(
+                        Modifier.weight(1f).padding(start = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            maxLines = 1)
+                        Text(dateStr,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Box(
+                        Modifier.size(24.dp)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (read) Icon(Icons.Default.Check, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp))
                     }
                 }
             }
         }
     }
+
+    if (editing) {
+        MetaEditor(
+            initial = meta,
+            coverPicker = { pickImage.launch("image/*") },
+            onDismiss = { editing = false },
+            onSave = {
+                vm.setTitleMeta(titleId, it)
+                editing = false
+            }
+        )
+    }
 }
 
-/** Круговой индикатор прогресса прочтения. */
 @Composable
-fun CircularProgress(progress: Float) {
-    val sizeDp = 60.dp
-    Box(
-        modifier = Modifier.size(sizeDp),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            Modifier
-                .size(sizeDp)
-                .background(
-                    Color(
-                        red = MaterialTheme.colorScheme.primary.red,
-                        green = MaterialTheme.colorScheme.primary.green,
-                        blue = MaterialTheme.colorScheme.primary.blue,
-                        alpha = 0.1f
-                    ),
-                    CircleShape
-                )
-        )
-        Box(
-            Modifier
-                .size(sizeDp)
-                .background(
-                    Color(
-                        red = MaterialTheme.colorScheme.primary.red,
-                        green = MaterialTheme.colorScheme.primary.green,
-                        blue = MaterialTheme.colorScheme.primary.blue,
-                        alpha = progress.coerceIn(0f, 1f)
-                    ),
-                    CircleShape
-                )
-        )
-        Text(
-            text = "${(progress * 100).toInt()}%",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary
-        )
+private fun RatingStars(rating: Double) {
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        (1..5).forEach { star ->
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = null,
+                tint = if (star <= rating.toInt()) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun InfoBlock(
+    title: String,
+    action: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(top = 20.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f))
+            action?.invoke()
+        }
+        content()
+    }
+}
+
+/** Редактор описания, автора, рейтинга и отзыва. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MetaEditor(
+    initial: TitleMeta,
+    coverPicker: () -> Unit,
+    onDismiss: () -> Unit,
+    onSave: (TitleMeta) -> Unit,
+) {
+    var edit by remember { mutableStateOf(initial) }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Редактировать", style = MaterialTheme.typography.titleLarge)
+            OutlinedButton(onClick = coverPicker, modifier = Modifier.fillMaxWidth()) {
+                Text("Сменить обложку")
+            }
+            OutlinedTextField(
+                value = edit.author,
+                onValueChange = { edit = edit.copy(author = it) },
+                label = { Text("Автор") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = edit.description,
+                onValueChange = { edit = edit.copy(description = it) },
+                label = { Text("Описание") },
+                maxLines = 5,
+                modifier = Modifier.fillMaxWidth())
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Оценка:", style = MaterialTheme.typography.bodyMedium)
+                (1..5).forEach { star ->
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = if (star <= edit.rating.toInt())
+                            MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.outlineVariant,
+                        modifier = Modifier.size(28.dp).clickable {
+                            edit = edit.copy(
+                                rating = if (edit.rating.toInt() == star) 0.0
+                                else star.toDouble())
+                        })
+                }
+            }
+            OutlinedTextField(
+                value = edit.review,
+                onValueChange = { edit = edit.copy(review = it) },
+                label = { Text("Отзыв") },
+                maxLines = 5,
+                modifier = Modifier.fillMaxWidth())
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) { Text("Отмена") }
+                OutlinedButton(onClick = { onSave(edit) }) { Text("Сохранить") }
+            }
+        }
+    }
+}
+
+/** Круговой индикатор прогресса прочтения (настоящая дуга). */
+@Composable
+fun CircularProgress(progress: Float, size: Dp = 60.dp) {
+    val p = progress.coerceIn(0f, 1f)
+    val track = MaterialTheme.colorScheme.outlineVariant
+    val accent = MaterialTheme.colorScheme.primary
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = this.size.minDimension * 0.12f
+            val inset = stroke / 2f
+            val arcSize = Size(this.size.width - stroke, this.size.height - stroke)
+            drawArc(
+                color = track,
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round))
+            drawArc(
+                color = accent,
+                startAngle = -90f,
+                sweepAngle = 360f * p,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round))
+        }
+        Text("${(p * 100).toInt()}%",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
 /** Скопировать выбранное изображение как обложку в папку произведения. */
-fun copyCover(context: android.content.Context, titleId: String, uri: android.net.Uri) {
+fun copyCover(context: Context, titleId: String, uri: Uri) {
     try {
         val dir = File(titleId)
         dir.mkdirs()

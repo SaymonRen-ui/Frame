@@ -1,5 +1,6 @@
 package com.saymon.frame.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,14 +9,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,23 +45,23 @@ fun HistoryScreen(
     val hist = remember(tick) { vm.history() }
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = { TopAppBar(title = { Text("История") }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("История") },
+                actions = {
+                    if (hist.isNotEmpty()) {
+                        TextButton(onClick = {
+                            vm.clearHistory()
+                            tick++
+                        }) { Text("Очистить") }
+                    }
+                })
+        }
     ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Недавно читал",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f))
-                if (hist.isNotEmpty()) {
-                    OutlinedButton(onClick = {
-                        vm.clearHistory()
-                        tick++
-                    }) { Text("Очистить") }
-                }
-            }
+        Column(Modifier.fillMaxSize().padding(pad)) {
             if (hist.isEmpty()) {
                 Column(
-                    Modifier.fillMaxSize(),
+                    Modifier.fillMaxSize().padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -64,19 +71,41 @@ fun HistoryScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        top = 8.dp, bottom = 16.dp)
+                ) {
                     items(hist, key = { it.titleId + it.chapterUri }) { h: Progress ->
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(h.titleName,
-                                    style = MaterialTheme.typography.titleSmall)
-                                Text("${h.chapterName} · стр. ${h.page + 1}/${h.pages}",
-                                    color = MaterialTheme.colorScheme
-                                        .onSurfaceVariant)
-                                OutlinedButton(
-                                    onClick = { onRead(h.titleId, h.chapterUri) },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) { Text("Продолжить") }
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onRead(h.titleId, h.chapterUri) },
+                            shape = RoundedCornerShape(12.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Row(
+                                Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(h.titleName,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1)
+                                    Text("${h.chapterName.removeSuffix(".cbz")} · стр. ${h.page + 1}/${h.pages}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1)
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Продолжить",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp))
                             }
                         }
                     }

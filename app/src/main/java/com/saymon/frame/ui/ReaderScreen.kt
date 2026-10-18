@@ -241,26 +241,7 @@ fun ReaderScreen(
             }
         },
         bottomBar = {
-            if (menuOpen) {
-                Column(Modifier.background(bg).padding(12.dp)) {
-                    if (showNum && pages > 0) {
-                        Text("${page + 1} / $pages", color = Color.White, modifier = Modifier.align(Alignment.CenterHorizontally))
-                        Slider(value = page.toFloat(), onValueChange = { page = it.toInt() }, valueRange = 0f..maxOf(pages - 1, 0).toFloat(),
-                            onValueChangeFinished = { scope.launch {
-                                when (mode) {
-                                    ReadMode.PAGED_LTR, ReadMode.PAGED_RTL -> hPager.scrollToPage(page)
-                                    ReadMode.PAGED_VERTICAL -> vPager.scrollToPage(page)
-                                    else -> stripState.scrollToItem(page)
-                                }
-                                save()
-                            }})
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { prevChapter() }, enabled = idx > 0, modifier = Modifier.fillMaxWidth(0.5f)) { Text("← Глава") }
-                        OutlinedButton(onClick = { nextChapter() }, enabled = idx < chapters.size - 1, modifier = Modifier.fillMaxWidth(0.5f)) { Text("Глава →") }
-                    }
-                }
-            }
+            // Навигация по главам убрана из-под меню — меню настроек идёт до самого низа.
         }
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad).background(bg)) {
@@ -287,7 +268,21 @@ fun ReaderScreen(
                             .fillMaxHeight(0.85f)
                             .pointerInput(Unit) { detectTapGestures { } }
                     ) {
-                        ReaderMenu(vm, titleId, mode, { menuOpen = false })
+                        ReaderMenu(
+                            vm, titleId, mode, page, pages,
+                            onPageChange = { page = it.coerceIn(0, maxOf(pages - 1, 0)) },
+                            onPageCommit = {
+                                scope.launch {
+                                    when (mode) {
+                                        ReadMode.PAGED_LTR, ReadMode.PAGED_RTL -> hPager.scrollToPage(page)
+                                        ReadMode.PAGED_VERTICAL -> vPager.scrollToPage(page)
+                                        else -> stripState.scrollToItem(page)
+                                    }
+                                    save()
+                                }
+                            },
+                            onClose = { menuOpen = false }
+                        )
                     }
                 }
             }
@@ -314,7 +309,7 @@ fun ReaderScreen(
     }
 }
 
-/** Палитра меню читалки в стиле Mihon: тёплые тона, адаптация к светлой/тёмной теме. */
+/** Палитра меню читалки — строится из цветов текущей темы (тёмная/светлая). */
 private data class MenuPalette(
     val bg: Color,
     val onBg: Color,
@@ -326,31 +321,20 @@ private data class MenuPalette(
     val selectedText: Color,
 )
 
-private val DarkMenu = MenuPalette(
-    bg = Color(0xFF2B1D16),
-    onBg = Color(0xFFE8DED7),
-    onBgVariant = Color(0xFF9E8C80),
-    header = Color(0xFFD9A066),
-    accent = Color(0xFFFFB4A0),
-    border = Color(0xFF4E3E34),
-    selectedBg = Color(0xFF8C6A57),
-    selectedText = Color(0xFF2B1D16),
-)
-
-private val LightMenu = MenuPalette(
-    bg = Color(0xFFFFF8F5),
-    onBg = Color(0xFF2B1D16),
-    onBgVariant = Color(0xFF7A6A60),
-    header = Color(0xFF9C6435),
-    accent = Color(0xFFC0603C),
-    border = Color(0xFFDCCEC5),
-    selectedBg = Color(0xFFF2CDBA),
-    selectedText = Color(0xFF5A2F1E),
-)
-
 @Composable
-private fun readerMenuPalette(): MenuPalette =
-    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) DarkMenu else LightMenu
+private fun readerMenuPalette(): MenuPalette {
+    val cs = MaterialTheme.colorScheme
+    return MenuPalette(
+        bg = cs.surfaceContainerHigh,
+        onBg = cs.onSurface,
+        onBgVariant = cs.onSurfaceVariant,
+        header = cs.primary,
+        accent = cs.primary,
+        border = cs.outlineVariant,
+        selectedBg = cs.primary,
+        selectedText = cs.onPrimary,
+    )
+}
 
 /** Меню настроек читалки (как в Mihon). */
 @OptIn(ExperimentalLayoutApi::class)
@@ -359,6 +343,10 @@ private fun ReaderMenu(
     vm: LibraryViewModel,
     titleId: String,
     currentMode: Int,
+    page: Int,
+    pages: Int,
+    onPageChange: (Int) -> Unit,
+    onPageCommit: () -> Unit,
     onClose: () -> Unit,
 ) {
     val readModes = listOf(
@@ -380,6 +368,25 @@ private fun ReaderMenu(
             .fillMaxSize()
             .background(c.bg, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
     ) {
+        if (pages > 0) {
+            Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Страница", color = c.onBgVariant, style = MaterialTheme.typography.bodySmall)
+                    Text("${page + 1} / $pages", color = c.onBg, style = MaterialTheme.typography.bodySmall)
+                }
+                Slider(
+                    value = page.toFloat(),
+                    onValueChange = { onPageChange(it.toInt()) },
+                    onValueChangeFinished = { onPageCommit() },
+                    valueRange = 0f..maxOf(pages - 1, 0).toFloat(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = c.accent,
+                        activeTrackColor = c.accent,
+                        inactiveTrackColor = c.border
+                    )
+                )
+            }
+        }
         MenuTabs(c, menuTab) { menuTab = it }
         Column(
             modifier = Modifier
@@ -553,7 +560,7 @@ private fun MenuCheckbox(c: MenuPalette, title: String, checked: Boolean, onChan
                 .border(2.dp, if (checked) c.accent else c.onBgVariant, RoundedCornerShape(4.dp)),
             contentAlignment = Alignment.Center
         ) {
-            if (checked) Icon(Icons.Default.Check, contentDescription = null, tint = c.bg, modifier = Modifier.size(16.dp))
+            if (checked) Icon(Icons.Default.Check, contentDescription = null, tint = c.selectedText, modifier = Modifier.size(16.dp))
         }
         Text(
             title,

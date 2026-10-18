@@ -1,30 +1,38 @@
 package com.saymon.frame.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +40,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -39,9 +48,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,13 +59,15 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Библиотека: вкладки, поиск, сортировка, сетка обложек.
+ * Долгое нажатие на карточку — меню действий снизу.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
     var searching by remember { mutableStateOf(false) }
     var sorting by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
+    var sheetFor by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         vm.refresh()
@@ -111,6 +122,7 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                     TextButton(onClick = { adding = false }) { Text("Отмена") }
                 })
         }
+
         Column(Modifier.fillMaxSize().padding(pad)) {
             if (searching) {
                 OutlinedTextField(
@@ -118,14 +130,14 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                     label = { Text("Поиск") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp))
             }
             val tabs = remember(vm.libTick) {
                 listOf("Все") + vm.store.tabs()
             }
             LazyRow(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(count = tabs.size) { index ->
@@ -138,17 +150,9 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
             }
             val titles = vm.titles
             if (titles.isEmpty()) {
-                Column(
-                    Modifier.fillMaxSize().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text("Тут пусто",
-                        style = MaterialTheme.typography.titleLarge)
-                    Text("Создайте папки с файлами CBZ в корне устройства " +
-                        "(папка Frame) и нажмите Обновить",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                EmptyState("Тут пусто",
+                    "Создайте папки с файлами CBZ в корне устройства " +
+                        "(папка Frame) и нажмите Обновить")
             } else {
                 val mapping = remember(vm.libTick) { vm.store.titleTabs() }
                 val hist = remember(vm.libTick) { vm.history() }
@@ -165,16 +169,7 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                     else -> list
                 }
                 if (list.isEmpty()) {
-                    Column(
-                        Modifier.fillMaxSize().padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text("Тут пусто",
-                            style = MaterialTheme.typography.titleLarge)
-                        Text("Ничего не найдено",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    EmptyState("Тут пусто", "Ничего не найдено")
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(120.dp),
@@ -184,11 +179,20 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         gridItems(list, key = { it.id }) { t ->
+                            val n = remember(vm.libTick) {
+                                vm.chapters(t.id, t.name).size
+                            }
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.clickable { onTitle(t.id) }
+                                modifier = Modifier.combinedClickable(
+                                    onClick = { onTitle(t.id) },
+                                    onLongClick = { sheetFor = t.id }
+                                )
                             ) {
-                                Card {
+                                Card(
+                                    shape = RoundedCornerShape(12.dp),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
                                     val bmp = vm.covers[t.id]
                                     if (bmp != null) {
                                         Image(bmp, contentDescription = t.name,
@@ -209,21 +213,110 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                                         }
                                     }
                                 }
-                                val n = remember(vm.libTick) {
-                                    vm.chapters(t.id, t.name).size
-                                }
                                 Text(t.name,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 2)
+                                    maxLines = 2,
+                                    modifier = Modifier.padding(top = 6.dp))
                                 Text("$n гл.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme
-                                        .onSurfaceVariant)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    // Меню действий по долгому нажатию на карточку
+    val sid = sheetFor
+    if (sid != null) {
+        val name = remember(sid) { vm.titleName(sid) }
+        val cats = remember(sid) { mutableStateOf(vm.titleTabs(sid).toMutableSet()) }
+        val allTabs = remember(vm.libTick) { vm.store.tabs() }
+        ModalBottomSheet(onDismissRequest = { sheetFor = null }) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(name, style = MaterialTheme.typography.titleLarge)
+                Text("Категории",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp))
+                allTabs.forEach { tab ->
+                    val selected = cats.value.contains(tab)
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable {
+                                val s = cats.value
+                                if (selected) s.remove(tab) else s.add(tab)
+                                cats.value = s.toMutableSet()
+                                vm.store.setTitleTabs(sid, s)
+                                vm.refresh()
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.size(22.dp))
+                        Text(tab, modifier = Modifier.padding(start = 16.dp))
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(
+                    MaterialTheme.colorScheme.outlineVariant))
+                SheetAction("Удалить главы", Icons.Default.DeleteSweep) {
+                    vm.deleteChapters(sid)
+                    sheetFor = null
+                }
+                SheetAction("Удалить произведение", Icons.Default.DeleteForever) {
+                    vm.deleteTitle(sid)
+                    sheetFor = null
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SheetAction(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp))
+        Text(label,
+            modifier = Modifier.padding(start = 16.dp),
+            color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+private fun EmptyState(title: String, subtitle: String) {
+    Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        Text(subtitle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp))
     }
 }
