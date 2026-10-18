@@ -293,6 +293,47 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
     fun history(): List<Progress> = store.history()
     fun clearHistory() = store.clearHistory()
+    fun removeHistoryEntry(titleId: String, chapterUri: String) =
+        store.removeHistory(titleId, chapterUri)
+
+    // --- Главы: прочитано / избранное / удаление ---
+    fun chapterReadSet(titleId: String): Set<String> = store.strSet("read|$titleId")
+
+    /** Глава отмечена прочитанной, когда дочитана до конца. */
+    fun isChapterRead(titleId: String, chapterUri: String): Boolean =
+        chapterUri in chapterReadSet(titleId)
+
+    fun setChapterRead(titleId: String, chapterUri: String, read: Boolean) {
+        val s = chapterReadSet(titleId).toMutableSet()
+        if (read) s.add(chapterUri) else s.remove(chapterUri)
+        store.setStrSet("read|$titleId", s)
+    }
+
+    fun chapterFavSet(titleId: String): Set<String> = store.strSet("fav|$titleId")
+
+    /** Вернёт true, если глава теперь в избранном. */
+    fun toggleChapterFav(titleId: String, chapterUri: String): Boolean {
+        val s = chapterFavSet(titleId).toMutableSet()
+        val nowFav = if (chapterUri in s) { s.remove(chapterUri); false }
+        else { s.add(chapterUri); true }
+        store.setStrSet("fav|$titleId", s)
+        return nowFav
+    }
+
+    fun deleteChapter(chapterUri: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    java.io.File(chapterUri).delete()
+                } catch (_: Exception) {
+                }
+            }
+            refresh()
+        }
+    }
+
+    fun autoDeleteRead(): Boolean = store.autoDeleteRead()
+    fun setAutoDeleteRead(value: Boolean) = store.setAutoDeleteRead(value)
 
     // --- Метаданные ---
     fun titleMeta(titleId: String): TitleMeta = store.titleMeta(titleId)

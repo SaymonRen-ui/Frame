@@ -96,7 +96,7 @@ fun ReaderScreen(
     }
     val chapter = chapters.getOrNull(idx)
     val mode = vm.store.readMode()
-    val zonesOff = vm.store.tapZones() == 1
+    val zonesOff = vm.store.tapZones() == 1 || vm.store.tapZones() == 5
     val dtZoom = vm.store.doubleTapZoom()
     val showNum = vm.store.pageNumber()
     val bg = when (vm.store.bgColor()) {
@@ -156,12 +156,22 @@ fun ReaderScreen(
     }
     var menuOpen by remember { mutableStateOf(false) }
     var menuTab by remember { mutableStateOf(0) }
+    var autoDeleted by remember(chapter?.uri) { mutableStateOf(false) }
 
     fun save() {
         val ch = chapter ?: return
         if (pages <= 0) return
+        val last = page.coerceIn(0, pages - 1)
         vm.saveProgress(Progress(titleId, vm.titleName(titleId),
-            ch.uri, ch.name, page.coerceIn(0, pages - 1), pages, System.currentTimeMillis()))
+            ch.uri, ch.name, last, pages, System.currentTimeMillis()))
+        // Дошли до последней страницы — отмечаем главу прочитанной
+        if (pages > 1 && last >= pages - 1) {
+            vm.setChapterRead(titleId, ch.uri, true)
+            if (vm.autoDeleteRead() && !autoDeleted) {
+                autoDeleted = true
+                vm.deleteChapter(ch.uri)
+            }
+        }
     }
 
     if (chapter == null || loadErr.isNotEmpty()) {
@@ -247,12 +257,30 @@ fun ReaderScreen(
         Box(Modifier.fillMaxSize().padding(pad).background(bg)) {
             if (pages == 0) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Готовлю страницы…", color = Color.White) }
-            } else when (mode) {
-                ReadMode.PAGED_LTR -> HorizontalPager(state = hPager, modifier = Modifier.fillMaxSize()) { i -> PageView(session, i, dtZoom) }
-                ReadMode.PAGED_RTL -> HorizontalPager(state = hPager, reverseLayout = true, modifier = Modifier.fillMaxSize()) { i -> PageView(session, i, dtZoom) }
-                ReadMode.PAGED_VERTICAL -> VerticalPager(state = vPager, modifier = Modifier.fillMaxSize()) { i -> PageView(session, i, dtZoom) }
-                ReadMode.STRIP -> LazyColumn(state = stripState, modifier = Modifier.fillMaxSize()) { items(pages) { i -> PageView(session, i, dtZoom) } }
-                else -> LazyColumn(state = stripState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) { items(pages) { i -> PageView(session, i, dtZoom) } }
+            } else {
+                // Зоны касания крепим прямо к странице: лево/право — листать, центр — меню.
+                val tapZones = if (!zonesOff && !menuOpen) {
+                    Modifier.pointerInput(mode, pages) {
+                        detectTapGestures(
+                            onTap = { offset ->
+                                val w = size.width
+                                when {
+                                    offset.x < w * 0.33f -> goPrev()
+                                    offset.x > w * 0.66f -> goNext()
+                                    else -> menuOpen = true
+                                }
+                            },
+                            onLongPress = { menuOpen = true }
+                        )
+                    }
+                } else Modifier
+                when (mode) {
+                    ReadMode.PAGED_LTR -> HorizontalPager(state = hPager, modifier = Modifier.fillMaxSize().then(tapZones)) { i -> PageView(session, i, dtZoom) }
+                    ReadMode.PAGED_RTL -> HorizontalPager(state = hPager, reverseLayout = true, modifier = Modifier.fillMaxSize().then(tapZones)) { i -> PageView(session, i, dtZoom) }
+                    ReadMode.PAGED_VERTICAL -> VerticalPager(state = vPager, modifier = Modifier.fillMaxSize().then(tapZones)) { i -> PageView(session, i, dtZoom) }
+                    ReadMode.STRIP -> LazyColumn(state = stripState, modifier = Modifier.fillMaxSize().then(tapZones)) { items(pages) { i -> PageView(session, i, dtZoom) } }
+                    else -> LazyColumn(state = stripState, modifier = Modifier.fillMaxSize().then(tapZones), verticalArrangement = Arrangement.spacedBy(12.dp)) { items(pages) { i -> PageView(session, i, dtZoom) } }
+                }
             }
             // Меню настроек поверх всего — нижняя панель как в Mihon
             if (menuOpen) {
@@ -285,25 +313,6 @@ fun ReaderScreen(
                         )
                     }
                 }
-            }
-            // Зоны касания: весь экран — тап/долгий тап
-            if (!zonesOff && pages > 0 && !menuOpen) {
-                Box(Modifier.fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onTap = { offset ->
-                                val width = size.width
-                                if (offset.x < width * 0.33f) {
-                                    goPrev()
-                                } else if (offset.x > width * 0.66f) {
-                                    goNext()
-                                } else {
-                                    menuOpen = true
-                                }
-                            },
-                            onLongPress = { menuOpen = true }
-                        )
-                    })
             }
         }
     }

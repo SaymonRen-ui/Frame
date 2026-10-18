@@ -179,8 +179,10 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         gridItems(list, key = { it.id }) { t ->
-                            val n = remember(vm.libTick) {
-                                vm.chapters(t.id, t.name).size
+                            val chs = remember(vm.libTick) { vm.chapters(t.id, t.name) }
+                            val n = chs.size
+                            val unread = remember(vm.libTick) {
+                                chs.count { !vm.isChapterRead(t.id, it.uri) }
                             }
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -189,28 +191,42 @@ fun LibraryScreen(vm: LibraryViewModel, onTitle: (String) -> Unit) {
                                     onLongClick = { sheetFor = t.id }
                                 )
                             ) {
-                                Card(
-                                    shape = RoundedCornerShape(12.dp),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                                ) {
-                                    val bmp = vm.covers[t.id]
-                                    if (bmp != null) {
-                                        Image(bmp, contentDescription = t.name,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxWidth()
-                                                .aspectRatio(3f / 4f))
-                                    } else {
-                                        Box(
-                                            Modifier.fillMaxWidth()
-                                                .aspectRatio(3f / 4f),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(t.name.take(2).uppercase(),
-                                                style = MaterialTheme.typography
-                                                    .headlineMedium,
-                                                color = MaterialTheme.colorScheme
-                                                    .onSurfaceVariant)
+                                Box {
+                                    Card(
+                                        shape = RoundedCornerShape(12.dp),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                    ) {
+                                        val bmp = vm.covers[t.id]
+                                        if (bmp != null) {
+                                            Image(bmp, contentDescription = t.name,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxWidth()
+                                                    .aspectRatio(3f / 4f))
+                                        } else {
+                                            Box(
+                                                Modifier.fillMaxWidth()
+                                                    .aspectRatio(3f / 4f),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(t.name.take(2).uppercase(),
+                                                    style = MaterialTheme.typography
+                                                        .headlineMedium,
+                                                    color = MaterialTheme.colorScheme
+                                                        .onSurfaceVariant)
+                                            }
                                         }
+                                    }
+                                    if (unread > 0) {
+                                        Text("$unread",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier
+                                                .align(Alignment.TopStart)
+                                                .padding(6.dp)
+                                                .background(
+                                                    MaterialTheme.colorScheme.primary,
+                                                    RoundedCornerShape(8.dp))
+                                                .padding(horizontal = 7.dp, vertical = 2.dp))
                                     }
                                 }
                                 Text(t.name,

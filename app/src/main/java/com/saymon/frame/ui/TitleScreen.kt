@@ -6,10 +6,12 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -52,6 +55,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -80,7 +84,7 @@ import java.util.Locale
 /**
  * Произведение: обложка, название, автор, описание, рейтинг, отзыв, главы.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun TitleScreen(
     vm: LibraryViewModel,
@@ -94,6 +98,7 @@ fun TitleScreen(
     val meta = remember(vm.libTick) { vm.titleMeta(titleId) }
     val tabs = remember(vm.libTick) { vm.store.tabs() }
     var mine by remember(vm.libTick) { mutableStateOf(vm.titleTabs(titleId)) }
+    val favs = remember(vm.libTick) { vm.chapterFavSet(titleId) }
     val cover = vm.covers[titleId]
     val last = remember(vm.libTick) {
         vm.history().firstOrNull { it.titleId == titleId }
@@ -102,6 +107,7 @@ fun TitleScreen(
     var editing by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
     var sortByName by remember { mutableStateOf(true) }
+    var selected by remember(vm.libTick) { mutableStateOf(emptySet<String>()) }
 
     val pickImage = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -117,7 +123,7 @@ fun TitleScreen(
     ) { uris -> vm.importChapters(titleId, uris) }
 
     val totalChapters = chapters.size
-    val readChapters = chapters.count { vm.progress(titleId, it.uri) > 0 }
+    val readChapters = chapters.count { vm.isChapterRead(titleId, it.uri) }
     val progressPct = if (totalChapters > 0) readChapters.toFloat() / totalChapters else 0f
     val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
     val sortedChapters = if (sortByName)
@@ -154,12 +160,58 @@ fun TitleScreen(
             )
         },
         floatingActionButton = {
-            if (chapters.isNotEmpty()) {
+            if (chapters.isNotEmpty() && selected.isEmpty()) {
                 ExtendedFloatingActionButton(
                     onClick = { onRead(last?.chapterUri ?: chapters.first().uri) },
                     icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
                     text = { Text(if (last != null) "Продолжить" else "Начать") }
                 )
+            }
+        },
+        bottomBar = {
+            if (selected.isNotEmpty()) {
+                Surface(tonalElevation = 3.dp) {
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Выбрано: ${selected.size}",
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.weight(1f))
+                            IconButton(onClick = { selected = emptySet() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Снять выбор")
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val allRead = selected.all { vm.isChapterRead(titleId, it) }
+                            OutlinedButton(
+                                onClick = {
+                                    selected.forEach { vm.setChapterRead(titleId, it, !allRead) }
+                                    selected = emptySet()
+                                    vm.refresh()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) { Text(if (allRead) "Непрочитано" else "Прочитано") }
+                            OutlinedButton(
+                                onClick = {
+                                    selected.forEach { vm.toggleChapterFav(titleId, it) }
+                                    selected = emptySet()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("В избранное") }
+                            OutlinedButton(
+                                onClick = {
+                                    selected.forEach { vm.deleteChapter(it) }
+                                    selected = emptySet()
+                                    vm.refresh()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Удалить") }
+                        }
+                    }
+                }
             }
         }
     ) { pad ->
@@ -285,12 +337,25 @@ fun TitleScreen(
             }
 
             items(sortedChapters, key = { it.uri }) { ch ->
-                val read = vm.progress(titleId, ch.uri) > 0
+                val read = vm.isChapterRead(titleId, ch.uri)
+                val fav = favs.contains(ch.uri)
+                val isSel = selected.contains(ch.uri)
                 val displayName = ch.name.removeSuffix(".cbz").removeSuffix(".CBZ")
                 val dateStr = dateFormat.format(Date(File(ch.uri).lastModified()))
                 Row(
                     Modifier.fillMaxWidth()
-                        .clickable { onRead(ch.uri) }
+                        .background(if (isSel) MaterialTheme.colorScheme.primary
+                            .copy(alpha = 0.14f) else Color.Transparent)
+                        .combinedClickable(
+                            onClick = {
+                                if (selected.isNotEmpty())
+                                    selected = if (isSel) selected - ch.uri else selected + ch.uri
+                                else onRead(ch.uri)
+                            },
+                            onLongClick = {
+                                selected = if (isSel) selected - ch.uri else selected + ch.uri
+                            }
+                        )
                         .padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -307,6 +372,11 @@ fun TitleScreen(
                         Text(dateStr,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (fav) {
+                        Icon(Icons.Default.Star, contentDescription = "В избранном",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp).padding(end = 2.dp))
                     }
                     Box(
                         Modifier.size(24.dp)

@@ -123,25 +123,53 @@ class Store(context: Context) {
         try {
             val cur = history()
                 .filterNot { it.titleId == p.titleId && it.chapterUri == p.chapterUri }
-            val all = (listOf(p) + cur).take(50)
-            val a = JSONArray()
-            for (h in all) {
-                a.put(JSONObject()
-                    .put("titleId", h.titleId)
-                    .put("titleName", h.titleName)
-                    .put("chapterUri", h.chapterUri)
-                    .put("chapterName", h.chapterName)
-                    .put("page", h.page)
-                    .put("pages", h.pages)
-                    .put("time", h.time))
+            writeHistory((listOf(p) + cur).take(50))
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun writeHistory(all: List<Progress>) {
+        val a = JSONArray()
+        for (h in all) {
+            a.put(JSONObject()
+                .put("titleId", h.titleId)
+                .put("titleName", h.titleName)
+                .put("chapterUri", h.chapterUri)
+                .put("chapterName", h.chapterName)
+                .put("page", h.page)
+                .put("pages", h.pages)
+                .put("time", h.time))
+        }
+        prefs().edit { putString("history", a.toString()) }
+    }
+
+    /** Удалить одну запись из истории. */
+    fun removeHistory(titleId: String, chapterUri: String) {
+        try {
+            val cur = history().filterNot {
+                it.titleId == titleId && it.chapterUri == chapterUri
             }
-            prefs().edit { putString("history", a.toString()) }
+            writeHistory(cur)
         } catch (_: Exception) {
         }
     }
 
     fun clearHistory() {
         prefs().edit { putString("history", "[]") }
+    }
+
+    // --- Наборы строк (избранные главы, отметки о прочтении) ---
+    fun strSet(key: String): Set<String> {
+        return try {
+            val a = JSONArray(prefs().getString(key, "[]").orEmpty())
+            List(a.length()) { a.getString(it) }.toSet()
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
+    fun setStrSet(key: String, v: Set<String>) {
+        prefs().edit { putString(key, JSONArray(v.toList()).toString()) }
     }
 
     // --- Настройки чтения ---
@@ -171,6 +199,9 @@ class Store(context: Context) {
 
     fun fullscreen(): Boolean = prefs().getBoolean("fullscreen", false)
     fun setFullscreen(v: Boolean) = prefs().edit { putBoolean("fullscreen", v) }
+
+    fun autoDeleteRead(): Boolean = prefs().getBoolean("auto_delete_read", false)
+    fun setAutoDeleteRead(v: Boolean) = prefs().edit { putBoolean("auto_delete_read", v) }
 
     // --- Универсальные хелперы для расширенных настроек читалки ---
     fun i(key: String, def: Int = 0): Int = prefs().getInt(key, def)

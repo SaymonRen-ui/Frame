@@ -104,6 +104,11 @@ fun SettingsScreen(vm: LibraryViewModel) {
                     keep = it
                     vm.store.setKeepScreen(it)
                 }
+                var autoDel by remember { mutableStateOf(vm.autoDeleteRead()) }
+                ToggleRow("Удалять главу после прочтения", autoDel) {
+                    autoDel = it
+                    vm.setAutoDeleteRead(it)
+                }
             }
 
             SectionCard("Библиотека") {
