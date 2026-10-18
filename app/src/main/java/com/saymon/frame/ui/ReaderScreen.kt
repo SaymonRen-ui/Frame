@@ -57,6 +57,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -231,6 +232,19 @@ fun ReaderScreen(
     fun prevChapter() { save(); if (idx > 0) { idx--; page = 0 } }
     fun nextChapter() { save(); if (idx < chapters.size - 1) { idx++; page = 0 } }
 
+    // Короткий тап по краям — перелистывание, по центру — меню; долгое нажатие — меню.
+    val onPageTap: (Float) -> Unit = { frac ->
+        if (!zonesOff) {
+            val rtl = mode == ReadMode.PAGED_RTL
+            when {
+                frac < 0.33f -> if (rtl) goNext() else goPrev()
+                frac > 0.66f -> if (rtl) goPrev() else goNext()
+                else -> menuOpen = true
+            }
+        }
+    }
+    val onPageLong: () -> Unit = { menuOpen = true }
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = bg,
@@ -258,28 +272,12 @@ fun ReaderScreen(
             if (pages == 0) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Готовлю страницы…", color = Color.White) }
             } else {
-                // Зоны касания крепим прямо к странице: лево/право — листать, центр — меню.
-                val tapZones = if (!zonesOff && !menuOpen) {
-                    Modifier.pointerInput(mode, pages) {
-                        detectTapGestures(
-                            onTap = { offset ->
-                                val w = size.width
-                                when {
-                                    offset.x < w * 0.33f -> goPrev()
-                                    offset.x > w * 0.66f -> goNext()
-                                    else -> menuOpen = true
-                                }
-                            },
-                            onLongPress = { menuOpen = true }
-                        )
-                    }
-                } else Modifier
                 when (mode) {
-                    ReadMode.PAGED_LTR -> HorizontalPager(state = hPager, modifier = Modifier.fillMaxSize().then(tapZones)) { i -> PageView(session, i, dtZoom) }
-                    ReadMode.PAGED_RTL -> HorizontalPager(state = hPager, reverseLayout = true, modifier = Modifier.fillMaxSize().then(tapZones)) { i -> PageView(session, i, dtZoom) }
-                    ReadMode.PAGED_VERTICAL -> VerticalPager(state = vPager, modifier = Modifier.fillMaxSize().then(tapZones)) { i -> PageView(session, i, dtZoom) }
-                    ReadMode.STRIP -> LazyColumn(state = stripState, modifier = Modifier.fillMaxSize().then(tapZones)) { items(pages) { i -> PageView(session, i, dtZoom) } }
-                    else -> LazyColumn(state = stripState, modifier = Modifier.fillMaxSize().then(tapZones), verticalArrangement = Arrangement.spacedBy(12.dp)) { items(pages) { i -> PageView(session, i, dtZoom) } }
+                    ReadMode.PAGED_LTR -> HorizontalPager(state = hPager, modifier = Modifier.fillMaxSize()) { i -> PageView(session, i, dtZoom, onPageTap, onPageLong) }
+                    ReadMode.PAGED_RTL -> HorizontalPager(state = hPager, reverseLayout = true, modifier = Modifier.fillMaxSize()) { i -> PageView(session, i, dtZoom, onPageTap, onPageLong) }
+                    ReadMode.PAGED_VERTICAL -> VerticalPager(state = vPager, modifier = Modifier.fillMaxSize()) { i -> PageView(session, i, dtZoom, onPageTap, onPageLong) }
+                    ReadMode.STRIP -> LazyColumn(state = stripState, modifier = Modifier.fillMaxSize()) { items(pages) { i -> PageView(session, i, dtZoom, onPageTap, onPageLong) } }
+                    else -> LazyColumn(state = stripState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) { items(pages) { i -> PageView(session, i, dtZoom, onPageTap, onPageLong) } }
                 }
             }
             // Меню настроек поверх всего — нижняя панель как в Mihon
@@ -604,7 +602,13 @@ private fun MenuSlider(c: MenuPalette, label: String, value: Int, onChange: (Int
 private fun Divider() { Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant)) }
 
 @Composable
-private fun PageView(session: ChapterSession?, index: Int, dtZoom: Boolean) {
+private fun PageView(
+    session: ChapterSession?,
+    index: Int,
+    dtZoom: Boolean,
+    onSingleTap: (Float) -> Unit = {},
+    onLongPress: () -> Unit = {},
+) {
     var bmp by remember(session, index) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(session, index) {
         bmp = withContext(Dispatchers.IO) { val b = session?.let { decodePage(it, index) }; b?.asImageBitmap() }
@@ -612,13 +616,22 @@ private fun PageView(session: ChapterSession?, index: Int, dtZoom: Boolean) {
     var zoom by remember(session, index) { mutableFloatStateOf(1f) }
     var offX by remember(session, index) { mutableFloatStateOf(0f) }
     var offY by remember(session, index) { mutableFloatStateOf(0f) }
+    val cbTap by rememberUpdatedState(onSingleTap)
+    val cbLong by rememberUpdatedState(onLongPress)
+    val zoomNow by rememberUpdatedState(zoom)
     val b = bmp
     if (b == null) {
         Box(Modifier.fillMaxSize().aspectRatio(3f / 4f), contentAlignment = Alignment.Center) { Text("…", color = Color.Gray) }
     } else {
         var mod: Modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = zoom, scaleY = zoom, translationX = offX, translationY = offY)
-        if (dtZoom) {
-            mod = mod.pointerInput(session, index) { detectTapGestures(onDoubleTap = { if (zoom > 1f) { zoom = 1f; offX = 0f; offY = 0f } else { zoom = 2.2f } }) }
+        mod = mod.pointerInput(session, index) {
+            detectTapGestures(
+                onTap = { off -> if (zoomNow <= 1.01f) cbTap(off.x / size.width) },
+                onLongPress = { cbLong() },
+                onDoubleTap = if (dtZoom) {
+                    { if (zoomNow > 1f) { zoom = 1f; offX = 0f; offY = 0f } else zoom = 2.2f }
+                } else null
+            )
         }
         if (zoom > 1f) {
             mod = mod.pointerInput(session, index) { detectDragGestures { change, drag -> change.consume(); offX += drag.x; offY += drag.y } }

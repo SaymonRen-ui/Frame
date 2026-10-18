@@ -2,6 +2,7 @@ package com.saymon.frame.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,10 +16,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -53,7 +58,7 @@ fun SettingsScreen(vm: LibraryViewModel) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SectionCard("Оформление") {
+            CollapsibleCard("Оформление", initialExpanded = true) {
                 ChipRowValues(
                     options = listOf(
                         "Системная" to 0, "Светлая" to 1, "Тёмная" to 2),
@@ -61,7 +66,7 @@ fun SettingsScreen(vm: LibraryViewModel) {
                     onSelect = { vm.chooseTheme(it) })
             }
 
-            SectionCard("Режим чтения по умолчанию") {
+            CollapsibleCard("Режим чтения по умолчанию") {
                 var mode by remember { mutableStateOf(vm.store.readMode()) }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     listOf(
@@ -77,7 +82,7 @@ fun SettingsScreen(vm: LibraryViewModel) {
                 }
             }
 
-            SectionCard("Чтение") {
+            CollapsibleCard("Чтение") {
                 var orient by remember { mutableStateOf(vm.store.orientation()) }
                 var zones by remember { mutableStateOf(vm.store.tapZones()) }
                 var dtZoom by remember { mutableStateOf(vm.store.doubleTapZoom()) }
@@ -111,7 +116,7 @@ fun SettingsScreen(vm: LibraryViewModel) {
                 }
             }
 
-            SectionCard("Библиотека") {
+            CollapsibleCard("Библиотека") {
                 Text(
                     "Папка Frame в корне устройства: " +
                         if (vm.workDir().isDirectory) "на месте" else "нет доступа",
@@ -141,7 +146,7 @@ fun SettingsScreen(vm: LibraryViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            SectionCard("О приложении") {
+            CollapsibleCard("О приложении") {
                 Text("Frame 0.1.0 · читалка CBZ",
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(onClick = {
@@ -162,14 +167,37 @@ fun SettingsScreen(vm: LibraryViewModel) {
 }
 
 @Composable
-private fun SectionCard(title: String, content: @Composable () -> Unit) {
+private fun CollapsibleCard(
+    title: String,
+    initialExpanded: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(initialExpanded) }
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary)
-            content()
+        Column(Modifier.animateContentSize()) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f))
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (expanded) {
+                Column(
+                    Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    content()
+                }
+            }
         }
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,7 +36,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -98,7 +101,8 @@ fun TitleScreen(
     val meta = remember(vm.libTick) { vm.titleMeta(titleId) }
     val tabs = remember(vm.libTick) { vm.store.tabs() }
     var mine by remember(vm.libTick) { mutableStateOf(vm.titleTabs(titleId)) }
-    val favs = remember(vm.libTick) { vm.chapterFavSet(titleId) }
+    var favTick by remember { mutableStateOf(0) }
+    val favs = remember(vm.libTick, favTick) { vm.chapterFavSet(titleId) }
     val cover = vm.covers[titleId]
     val last = remember(vm.libTick) {
         vm.history().firstOrNull { it.titleId == titleId }
@@ -184,31 +188,40 @@ fun TitleScreen(
                                 Icon(Icons.Default.Close, contentDescription = "Снять выбор")
                             }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             val allRead = selected.all { vm.isChapterRead(titleId, it) }
-                            OutlinedButton(
-                                onClick = {
-                                    selected.forEach { vm.setChapterRead(titleId, it, !allRead) }
-                                    selected = emptySet()
-                                    vm.refresh()
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) { Text(if (allRead) "Непрочитано" else "Прочитано") }
-                            OutlinedButton(
-                                onClick = {
-                                    selected.forEach { vm.toggleChapterFav(titleId, it) }
-                                    selected = emptySet()
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("В избранное") }
-                            OutlinedButton(
-                                onClick = {
-                                    selected.forEach { vm.deleteChapter(it) }
-                                    selected = emptySet()
-                                    vm.refresh()
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("Удалить") }
+                            IconButton(onClick = {
+                                selected.forEach { vm.setChapterRead(titleId, it, !allRead) }
+                                selected = emptySet()
+                                vm.refresh()
+                            }) {
+                                Icon(Icons.Default.CheckCircle,
+                                    contentDescription = if (allRead) "Отметить непрочитанным" else "Отметить прочитанным",
+                                    tint = if (allRead) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = {
+                                selected.forEach { vm.toggleChapterFav(titleId, it) }
+                                favTick++
+                                selected = emptySet()
+                            }) {
+                                Icon(Icons.Default.Star,
+                                    contentDescription = "В избранное",
+                                    tint = MaterialTheme.colorScheme.primary)
+                            }
+                            IconButton(onClick = {
+                                selected.forEach { vm.deleteChapter(it) }
+                                selected = emptySet()
+                                vm.refresh()
+                            }) {
+                                Icon(Icons.Default.Delete,
+                                    contentDescription = "Удалить",
+                                    tint = MaterialTheme.colorScheme.error)
+                            }
                         }
                     }
                 }
@@ -366,17 +379,20 @@ fun TitleScreen(
                         Modifier.weight(1f).padding(start = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Text(displayName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            maxLines = 1)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (fav) {
+                                Icon(Icons.Default.Star, contentDescription = "В избранном",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text(displayName,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1)
+                        }
                         Text(dateStr,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (fav) {
-                        Icon(Icons.Default.Star, contentDescription = "В избранном",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp).padding(end = 2.dp))
                     }
                     Box(
                         Modifier.size(24.dp)
