@@ -449,25 +449,34 @@ private fun ModernOptionButton(
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = Color.White
-    Box(
-        Modifier
+    val surfaceVariant = Color(0xFF2A2A2E)
+    Column(
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp)
-            .clickable { onClick() }
-            .background(
-                if (selected) primary.copy(alpha = 0.12f)
-                else Color.Transparent
-            )
-            .border(
-                if (selected) 1.dp else 0.dp,
-                primary,
-                shape = RoundedCornerShape(10.dp)
-            ),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        Row(Modifier.fillMaxWidth()) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, color = if (selected) primary else onSurface, modifier = Modifier.fillMaxWidth())
-            if (selected) Icon(Icons.Default.Check, contentDescription = null, tint = primary)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp)
+                .clickable { onClick() }
+                .background(
+                    if (selected) primary.copy(alpha = 0.15f)
+                    else surfaceVariant
+                )
+                .border(
+                    if (selected) 1.5.dp else 0.dp,
+                    primary,
+                    shape = RoundedCornerShape(12.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(Modifier.fillMaxWidth()) {
+                Text(title, style = MaterialTheme.typography.bodyMedium, color = if (selected) primary else onSurface, modifier = Modifier.weight(1f))
+                if (selected) {
+                    Icon(Icons.Default.Check, contentDescription = null, tint = primary, modifier = Modifier.size(20.dp))
+                }
+            }
         }
     }
 }
@@ -480,28 +489,31 @@ private fun ModernCheckboxRow(
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = Color.White
-    val surfaceVariant = Color(0xFFB0B0B0)
+    val surfaceVariant = Color(0xFF2A2A2E)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clickable { onChange(!checked) }
+            .background(if (checked) primary.copy(alpha = 0.08f) else Color.Transparent)
+            .clickable { },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier
-                .size(26.dp)
+                .size(30.dp)
                 .border(
                     2.dp,
                     if (checked) primary else surfaceVariant,
-                    shape = RoundedCornerShape(6.dp)
+                    shape = RoundedCornerShape(8.dp)
                 )
                 .background(if (checked) primary else Color.Transparent)
                 .clickable { onChange(!checked) },
             contentAlignment = Alignment.Center
         ) {
-            if (checked) Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+            if (checked) Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
         }
-        Box(Modifier.fillMaxWidth()) { Text(title, style = MaterialTheme.typography.bodyMedium, color = onSurface, modifier = Modifier.padding(start = 12.dp)) }
+        Box(Modifier.fillMaxWidth()) { Text(title, style = MaterialTheme.typography.bodyMedium, color = onSurface, modifier = Modifier.padding(start = 16.dp)) }
     }
 }
 
