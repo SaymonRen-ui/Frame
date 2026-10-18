@@ -172,6 +172,12 @@ class Store(context: Context) {
     fun fullscreen(): Boolean = prefs().getBoolean("fullscreen", false)
     fun setFullscreen(v: Boolean) = prefs().edit { putBoolean("fullscreen", v) }
 
+    // --- Универсальные хелперы для расширенных настроек читалки ---
+    fun i(key: String, def: Int = 0): Int = prefs().getInt(key, def)
+    fun si(key: String, v: Int) = prefs().edit { putInt(key, v) }
+    fun b(key: String, def: Boolean = false): Boolean = prefs().getBoolean(key, def)
+    fun sb(key: String, v: Boolean) = prefs().edit { putBoolean(key, v) }
+
     /** Размер кэша распакованных глав (байт) — для кнопки очистки. */
     fun cacheSize(): Long {
         return try {
