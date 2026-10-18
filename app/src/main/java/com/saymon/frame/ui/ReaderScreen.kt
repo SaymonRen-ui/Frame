@@ -283,13 +283,14 @@ fun ReaderScreen(
                     }
                 }
             }
-            // Зоны касания: лево/право — листать, центр — меню по долгому нажатию
+            // Зоны касания: лево/право — листать, центр — меню по тапу или долгому нажатию
             if (!zonesOff && pages > 0 && !menuOpen) {
                 Row(Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxWidth(0.33f).clickable { goPrev() })
                     Box(Modifier.fillMaxWidth(0.34f)
                         .pointerInput(Unit) {
                             detectTapGestures(
+                                onTap = { menuOpen = true },
                                 onLongPress = { menuOpen = true }
                             )
                         })
