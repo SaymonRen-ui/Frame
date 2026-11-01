@@ -1,8 +1,8 @@
 package com.saymon.frame.ui
 
 import android.app.Activity
-import android.content.Context
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -40,10 +40,12 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -78,6 +80,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.saymon.frame.data.NaturalSort
 import com.saymon.frame.data.TitleMeta
 import java.io.File
 import java.text.SimpleDateFormat
@@ -112,26 +115,44 @@ fun TitleScreen(
     var sortMenuOpen by remember { mutableStateOf(false) }
     var sortByName by remember { mutableStateOf(true) }
     var selected by remember(vm.libTick) { mutableStateOf(emptySet<String>()) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
 
     val pickImage = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let {
-            copyCover(context, titleId, it)
-            vm.invalidateCover(titleId)
-            vm.refresh()
-        }
+        uri?.let { vm.importCover(titleId, it) }
     }
     val pickCbz = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris -> vm.importChapters(titleId, uris) }
+    ) { uris ->
+        vm.importChapters(titleId, uris) { result ->
+            val message = when {
+                result.imported > 0 && result.failed == 0 ->
+                    "Добавлено глав: ${result.imported}"
+                result.imported > 0 ->
+                    "Добавлено: ${result.imported}, не удалось: ${result.failed}"
+                result.failed > 0 ->
+                    "Не удалось добавить выбранные файлы"
+                else -> "Файлы уже есть в произведении"
+            }
+            android.widget.Toast.makeText(
+                context, message, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val totalChapters = chapters.size
     val readChapters = chapters.count { vm.isChapterRead(titleId, it.uri) }
     val progressPct = if (totalChapters > 0) readChapters.toFloat() / totalChapters else 0f
     val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
-    val sortedChapters = if (sortByName)
-        chapters.sortedBy { it.name } else chapters.sortedByDescending { it.name }
+    val chapterOrder = Comparator<com.saymon.frame.core.cbz.ChapterInfo> { a, b ->
+        NaturalSort.compare(a.name, b.name)
+    }
+    val sortedChapters = chapters.sortedWith(
+        if (sortByName) chapterOrder else chapterOrder.reversed()
+    )
+    val continueUri = last?.chapterUri?.takeIf { vm.exists(it) }
+        ?: chapters.firstOrNull()?.uri
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -157,18 +178,41 @@ fun TitleScreen(
                     IconButton(onClick = { vm.refresh() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Обновить")
                     }
-                    IconButton(onClick = { pickCbz.launch(arrayOf("*/*")) }) {
+                    IconButton(onClick = {
+                        val opened = if (titleId.startsWith("content://")) {
+                            openFolder(context, Uri.parse(titleId))
+                        } else {
+                            openFolder(context, File(titleId))
+                        }
+                        if (!opened) {
+                            android.widget.Toast.makeText(
+                                context, "Не удалось открыть проводник",
+                                android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Icon(Icons.Default.Folder, contentDescription = "Открыть папку произведения")
+                    }
+                    IconButton(onClick = {
+                        pickCbz.launch(arrayOf(
+                            "application/zip",
+                            "application/x-cbz",
+                            "application/vnd.comicbook+zip",
+                            "application/pdf",
+                            "application/octet-stream"
+                        ))
+                    }) {
                         Icon(Icons.Default.Add, contentDescription = "Добавить главы")
                     }
                 }
             )
         },
         floatingActionButton = {
-            if (chapters.isNotEmpty() && selected.isEmpty()) {
+            val start = continueUri
+            if (start != null && selected.isEmpty()) {
                 ExtendedFloatingActionButton(
-                    onClick = { onRead(last?.chapterUri ?: chapters.first().uri) },
+                    onClick = { onRead(start) },
                     icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-                    text = { Text(if (last != null) "Продолжить" else "Начать") }
+                    text = { Text(if (last?.chapterUri == start) "Продолжить" else "Начать") }
                 )
             }
         },
@@ -213,11 +257,7 @@ fun TitleScreen(
                                     contentDescription = "В избранное",
                                     tint = MaterialTheme.colorScheme.primary)
                             }
-                            IconButton(onClick = {
-                                selected.forEach { vm.deleteChapter(it) }
-                                selected = emptySet()
-                                vm.refresh()
-                            }) {
+                            IconButton(onClick = { confirmDelete = true }) {
                                 Icon(Icons.Default.Delete,
                                     contentDescription = "Удалить",
                                     tint = MaterialTheme.colorScheme.error)
@@ -252,7 +292,7 @@ fun TitleScreen(
                         } else {
                             Box(Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center) {
-                                Text(name.take(2).uppercase(),
+                                Text(name,
                                     style = MaterialTheme.typography.headlineMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -266,7 +306,7 @@ fun TitleScreen(
                         Text(meta.author.ifBlank { "Неизвестный автор" },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("$totalChapters глав · прочитано $readChapters",
+                        Text("$totalChapters ${chapterWord(totalChapters)} · прочитано $readChapters",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically,
@@ -336,7 +376,7 @@ fun TitleScreen(
                     Column {
                         Text("Прогресс чтения",
                             style = MaterialTheme.typography.titleSmall)
-                        Text("$readChapters из $totalChapters глав",
+                        Text("$readChapters из $totalChapters ${chapterGenitive(totalChapters)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -344,7 +384,7 @@ fun TitleScreen(
             }
 
             item {
-                Text("$totalChapters глав",
+                Text("$totalChapters ${chapterWord(totalChapters)}",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
             }
@@ -353,8 +393,8 @@ fun TitleScreen(
                 val read = vm.isChapterRead(titleId, ch.uri)
                 val fav = favs.contains(ch.uri)
                 val isSel = selected.contains(ch.uri)
-                val displayName = ch.name.removeSuffix(".cbz").removeSuffix(".CBZ")
-                val dateStr = dateFormat.format(Date(File(ch.uri).lastModified()))
+                val displayName = ch.name.replace(Regex("(?i)\\.(cbz|pdf)$"), "")
+                val dateStr = dateFormat.format(Date(vm.lastModified(ch.uri)))
                 Row(
                     Modifier.fillMaxWidth()
                         .background(if (isSel) MaterialTheme.colorScheme.primary
@@ -415,10 +455,44 @@ fun TitleScreen(
             onDismiss = { editing = false },
             onSave = {
                 vm.setTitleMeta(titleId, it)
+                vm.touch()
                 editing = false
             }
         )
     }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Удалить главы?") },
+            text = { Text("Будет удалено: ${selected.size}. Файлы глав удаляются с устройства.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val uris = selected.toList()
+                    selected = emptySet()
+                    confirmDelete = false
+                    vm.deleteChapterUris(titleId, uris)
+                }) { Text("Удалить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Отмена") }
+            })
+    }
+}
+
+private fun chapterWord(count: Int): String {
+    val n = kotlin.math.abs(count) % 100
+    return when {
+        n in 11..14 -> "глав"
+        n % 10 == 1 -> "глава"
+        n % 10 in 2..4 -> "главы"
+        else -> "глав"
+    }
+}
+
+private fun chapterGenitive(count: Int): String {
+    val n = kotlin.math.abs(count) % 100
+    return if (n % 10 == 1 && n != 11) "главы" else "глав"
 }
 
 @Composable
@@ -556,17 +630,3 @@ fun CircularProgress(progress: Float, size: Dp = 60.dp) {
     }
 }
 
-/** Скопировать выбранное изображение как обложку в папку произведения. */
-fun copyCover(context: Context, titleId: String, uri: Uri) {
-    try {
-        val dir = File(titleId)
-        dir.mkdirs()
-        val cover = File(dir, "cover.jpg")
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            cover.outputStream().use { output ->
-                input.copyTo(output)
-            }
-        }
-    } catch (_: Exception) {
-    }
-}

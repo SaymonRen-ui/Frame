@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,18 +54,18 @@ fun HistoryScreen(
     onRead: (titleId: String, chapterUri: String) -> Unit,
 ) {
     var tick by remember { mutableStateOf(0) }
+    var confirmClear by remember { mutableStateOf(false) }
+    var missing by remember { mutableStateOf<String?>(null) }
     val hist = remember(tick, vm.libTick) { vm.history() }
     Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("История") },
                 actions = {
                     if (hist.isNotEmpty()) {
-                        TextButton(onClick = {
-                            vm.clearHistory()
-                            tick++
-                        }) { Text("Очистить") }
+                        TextButton(onClick = { confirmClear = true }) { Text("Очистить") }
                     }
                 })
         }
@@ -80,15 +81,22 @@ fun HistoryScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
+            val rows = remember(hist) {
+                var last = ""
+                hist.map { h ->
+                    val label = dayLabel(h.time)
+                    val header = label.takeIf { it != last }
+                    if (header != null) last = label
+                    header to h
+                }
+            }
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                var lastLabel = ""
-                items(hist, key = { it.titleId + it.chapterUri }) { h ->
-                    val label = dayLabel(h.time)
-                    if (label != lastLabel) {
-                        lastLabel = label
+                items(rows, key = { it.second.titleId + it.second.chapterUri }) { row ->
+                    val (label, h) = row
+                    if (label != null) {
                         Text(label,
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary,
@@ -96,7 +104,15 @@ fun HistoryScreen(
                     }
                     Row(
                         Modifier.fillMaxWidth()
-                            .clickable { onRead(h.titleId, h.chapterUri) }
+                            .clickable {
+                                if (vm.exists(h.chapterUri)) {
+                                    onRead(h.titleId, h.chapterUri)
+                                } else {
+                                    vm.removeHistoryEntry(h.titleId, h.chapterUri)
+                                    missing = h.chapterName
+                                    tick++
+                                }
+                            }
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -125,7 +141,7 @@ fun HistoryScreen(
                             Text(h.titleName,
                                 style = MaterialTheme.typography.titleSmall,
                                 maxLines = 1)
-                            Text("Гл. ${h.chapterName.removeSuffix(".cbz")} · ${timeLabel(h.time)}",
+                            Text("${h.chapterName.replace(Regex("(?i)\\.(cbz|pdf)$"), "")} · ${timeLabel(h.time)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1)
@@ -142,6 +158,34 @@ fun HistoryScreen(
                 }
             }
         }
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Очистить историю?") },
+            text = { Text("Все записи истории будут удалены. Прогресс чтения сохранится.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.clearHistory()
+                    confirmClear = false
+                    tick++
+                }) { Text("Очистить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text("Отмена") }
+            })
+    }
+
+    val miss = missing
+    if (miss != null) {
+        AlertDialog(
+            onDismissRequest = { missing = null },
+            title = { Text("Глава не найдена") },
+            text = { Text("«$miss» больше нет на устройстве. Запись удалена из истории.") },
+            confirmButton = {
+                TextButton(onClick = { missing = null }) { Text("Ок") }
+            })
     }
 }
 
@@ -163,7 +207,14 @@ private fun dayLabel(time: Long): String {
     return when {
         diff <= 0 -> "Сегодня"
         diff == 1 -> "Вчера"
-        diff < 7 -> "$diff дня назад"
+        diff in 2..6 -> {
+            val word = when {
+                diff % 10 == 1 && diff % 100 != 11 -> "день"
+                diff % 10 in 2..4 && diff % 100 !in 12..14 -> "дня"
+                else -> "дней"
+            }
+            "$diff $word назад"
+        }
         else -> SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(time))
     }
 }

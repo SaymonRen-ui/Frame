@@ -8,6 +8,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
@@ -34,6 +40,7 @@ import com.saymon.frame.ui.ReaderScreen
 import com.saymon.frame.ui.Screen
 import com.saymon.frame.ui.SettingsScreen
 import com.saymon.frame.ui.TitleScreen
+import com.saymon.frame.core.ads.BannerAd
 import com.saymon.frame.ui.theme.FrameTheme
 
 class MainActivity : ComponentActivity() {
@@ -44,6 +51,17 @@ class MainActivity : ComponentActivity() {
         // Android 15 + targetSdk 35+: рисуемся под системные панели,
         // отступы — через WindowInsets.safeDrawing на каждом экране.
         enableEdgeToEdge()
+        // Просим максимальную герцовку дисплея (60/90/120/144 Гц и т.д.),
+        // чтобы прокрутка читалки не упиралась в дефолтные 60 Гц.
+        try {
+            @Suppress("DEPRECATION")
+            val d = windowManager.defaultDisplay
+            val hz = d.supportedModes.maxOfOrNull { it.refreshRate } ?: d.refreshRate
+            if (hz > 0f) {
+                window.attributes = window.attributes.apply { preferredRefreshRate = hz }
+            }
+        } catch (_: Exception) {
+        }
         vm = ViewModelProvider(
             this,
             ViewModelProvider.AndroidViewModelFactory.getInstance(application)
@@ -80,7 +98,18 @@ private fun Root(vm: LibraryViewModel) {
                     onRead = { uri -> vm.go(Screen.Reader(s.titleId, uri)) })
                 else -> Scaffold(
                     bottomBar = {
-                        NavigationBar {
+                        Column(Modifier.navigationBarsPadding()) {
+                            if (vm.bottomTab == 0 || vm.bottomTab == 1) {
+                                BannerAd()
+                            }
+                            // Тонкий разделитель
+                            androidx.compose.material3.Divider(
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant)
+                            // Буферная зона 8dp — не реагирует на клики
+                            androidx.compose.foundation.layout.Spacer(
+                                Modifier.fillMaxWidth().height(8.dp))
+                            NavigationBar {
                             NavigationBarItem(
                                 selected = vm.bottomTab == 0,
                                 onClick = { vm.goTab(0) },
@@ -107,6 +136,7 @@ private fun Root(vm: LibraryViewModel) {
                                 label = { Text("Настройки") })
                         }
                     }
+                    }  // close Column
                 ) { pad ->
                     androidx.compose.foundation.layout.Box(
                         Modifier.padding(pad)) {

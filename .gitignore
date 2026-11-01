@@ -14,6 +14,12 @@ pepk.jar
 pepk_out.zip
 upload_cert.pem
 
+# Внутренние заметки и отладочные дампы — не для публичного репозитория
+Codex.txt
+HANDOFF.md
+.adb-user/
+.android-test*/
+
 # IDE
 .idea/
 .kotlin/

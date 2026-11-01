@@ -13,12 +13,114 @@ class Store(context: Context) {
     private val app = context.applicationContext
     private fun prefs() = app.getSharedPreferences("frame", Context.MODE_PRIVATE)
 
+    init {
+        migrateLegacySettings()
+    }
+
+    /**
+     * Старые версии хранили режимы по другой нумерации. Новые ключи
+     * (`nav_modes`, `crop_borders`, ...) показывают, что миграция уже не нужна.
+     */
+    private fun migrateLegacySettings() {
+        val p = prefs()
+        if (p.getInt("settings_schema", 0) >= 1) return
+        val newFormat = p.contains("nav_modes") || p.contains("crop_borders") ||
+            p.contains("sidebar_pad") || p.contains("chapter_transition")
+        val e = p.edit()
+        if (!newFormat) {
+            if (p.contains("read_mode")) {
+                e.putInt("read_mode", when (p.getInt("read_mode", 0)) {
+                    0 -> ReadMode.STRIP
+                    1 -> ReadMode.STRIP_GAPS
+                    2 -> ReadMode.PAGED_LTR
+                    3 -> ReadMode.PAGED_RTL
+                    4 -> ReadMode.PAGED_VERTICAL
+                    else -> p.getInt("read_mode", 0)
+                })
+            }
+            if (p.contains("orientation")) {
+                e.putInt("orientation", when (p.getInt("orientation", 0)) {
+                    1 -> Orient.PORTRAIT
+                    2 -> Orient.LANDSCAPE
+                    else -> p.getInt("orientation", 0)
+                })
+            }
+            if (p.contains("tap_zones") && p.getInt("tap_zones", 0) == 1) {
+                e.putInt("tap_zones", TapZone.DISABLED)
+            }
+        }
+        e.putInt("settings_schema", 1).apply()
+    }
+
     // --- Библиотека ---
     fun libraryUri(): String =
         prefs().getString("library_uri", "").orEmpty()
 
     fun setLibraryUri(uri: String) {
         prefs().edit { putString("library_uri", uri) }
+    }
+
+    fun compactLibrary(): Boolean = prefs().getBoolean("compact_library", false)
+    fun setCompactLibrary(value: Boolean) = prefs().edit { putBoolean("compact_library", value) }
+
+    /** Экспортирует настройки, прогресс и историю в переносимый JSON-файл. */
+    fun exportBackup(): String {
+        val out = JSONObject().put("version", 1)
+        val values = JSONObject()
+        for ((key, value) in prefs().all) {
+            // Путь/URI библиотеки привязан к устройству — в бэкап не попадает.
+            if (key == "library_uri") continue
+            val item = JSONObject()
+            when (value) {
+                is Boolean -> item.put("type", "boolean").put("value", value)
+                is Int -> item.put("type", "int").put("value", value)
+                is Long -> item.put("type", "long").put("value", value)
+                is Float -> item.put("type", "float").put("value", value.toDouble())
+                is String -> item.put("type", "string").put("value", value)
+                is Set<*> -> item.put("type", "strings")
+                    .put("value", JSONArray(value.filterIsInstance<String>()))
+                else -> continue
+            }
+            values.put(key, item)
+        }
+        return out.put("prefs", values).toString(2)
+    }
+
+    /** Восстанавливает только данные, созданные приложением. */
+    fun importBackup(raw: String): Boolean {
+        return try {
+            val root = JSONObject(raw)
+            if (root.optInt("version", 0) != 1) return false
+            val values = root.optJSONObject("prefs") ?: return false
+            // Доступ к папке библиотеки выдан этому устройству — не затираем его.
+            val library = prefs().getString("library_uri", "").orEmpty()
+            val edit = prefs().edit().clear()
+            if (library.isNotEmpty()) edit.putString("library_uri", library)
+            val keys = values.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                if (key == "library_uri") continue
+                val item = values.optJSONObject(key) ?: continue
+                when (item.optString("type")) {
+                    "boolean" -> edit.putBoolean(key, item.optBoolean("value"))
+                    "int" -> edit.putInt(key, item.optInt("value"))
+                    "long" -> edit.putLong(key, item.optLong("value"))
+                    "float" -> edit.putFloat(key, item.optDouble("value").toFloat())
+                    "string" -> edit.putString(key, item.optString("value"))
+                    "strings" -> {
+                        val a = item.optJSONArray("value") ?: JSONArray()
+                        edit.putStringSet(key, buildSet {
+                            for (i in 0 until a.length()) add(a.optString(i))
+                        })
+                    }
+                }
+            }
+            edit.apply()
+            migrateLegacySettings()
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     // --- Вкладки: список + привязка произведений ---
@@ -60,6 +162,15 @@ class Store(context: Context) {
         try {
             val o = JSONObject(prefs().getString("title_tabs", "{}").orEmpty())
             o.put(titleId, JSONArray(tabs.toList()))
+            prefs().edit { putString("title_tabs", o.toString()) }
+        } catch (_: Exception) {
+        }
+    }
+
+    fun removeTitleTabs(titleId: String) {
+        try {
+            val o = JSONObject(prefs().getString("title_tabs", "{}").orEmpty())
+            o.remove(titleId)
             prefs().edit { putString("title_tabs", o.toString()) }
         } catch (_: Exception) {
         }
@@ -172,6 +283,32 @@ class Store(context: Context) {
         prefs().edit { putString(key, JSONArray(v.toList()).toString()) }
     }
 
+    /** Убирает все следы главы: прогресс, прочитано, избранное, историю. */
+    fun removeChapterData(titleId: String, chapterUri: String) {
+        prefs().edit { remove("p|$titleId|$chapterUri") }
+        setStrSet("read|$titleId", strSet("read|$titleId") - chapterUri)
+        setStrSet("fav|$titleId", strSet("fav|$titleId") - chapterUri)
+        removeHistory(titleId, chapterUri)
+    }
+
+    /** Убирает все данные произведения: главы, метаданные, вкладки. */
+    fun removeTitleData(titleId: String) {
+        try {
+            prefs().edit {
+                val prefix = "p|$titleId|"
+                for (k in prefs().all.keys) {
+                    if (k.startsWith(prefix)) remove(k)
+                }
+                remove("read|$titleId")
+                remove("fav|$titleId")
+                remove("meta|$titleId")
+            }
+            removeTitleTabs(titleId)
+            writeHistory(history().filterNot { it.titleId == titleId })
+        } catch (_: Exception) {
+        }
+    }
+
     // --- Настройки чтения ---
     fun theme(): Int = prefs().getInt("theme", 0)
     fun setTheme(v: Int) = prefs().edit { putInt("theme", v) }
@@ -219,31 +356,76 @@ class Store(context: Context) {
         }
     }
 
-    fun clearCache(): Boolean {
+    /** Очищает кэш и возвращает освобождённые байты, либо -1 при ошибке. */
+    fun clearCache(): Long {
         return try {
+            val before = cacheSize()
             app.cacheDir.deleteRecursively()
             app.cacheDir.mkdirs()
-            true
+            before
         } catch (_: Exception) {
-            false
+            -1
         }
     }
 }
 
-/** Режимы чтения (как у Mihon, набор v1). */
+/** Режимы чтения — нумерация как в Mihon (порядок пунктов меню). */
 object ReadMode {
-    const val STRIP = 0 // длинные страницы
-    const val STRIP_GAPS = 1 // длинные с зазорами
-    const val PAGED_LTR = 2 // постранично слева направо
-    const val PAGED_RTL = 3 // постранично справа налево
-    const val PAGED_VERTICAL = 4 // постранично вертикально
+    const val DEFAULT = 0 // по умолчанию (слева направо)
+    const val PAGED_LTR = 1 // постранично слева направо
+    const val PAGED_RTL = 2 // постранично справа налево
+    const val PAGED_VERTICAL = 3 // постранично вертикально
+    const val STRIP = 4 // длинные страницы
+    const val STRIP_GAPS = 5 // длинные с зазорами
+
+    val labels = listOf(
+        "По умолчанию",
+        "Постранично (слева направо)",
+        "Постранично (справа налево)",
+        "Постранично (вертикально)",
+        "Длинные страницы",
+        "Длинные страницы с зазорами",
+    )
 }
 
-/** Ориентация: 0 системная, 1 портрет, 2 альбом. */
+/** Ориентация — как ReaderOrientation в Mihon. */
 object Orient {
-    const val SYSTEM = 0
-    const val PORTRAIT = 1
-    const val LANDSCAPE = 2
+    const val DEFAULT = 0 // системная по умолчанию
+    const val FREE = 1 // свободная (по датчику)
+    const val PORTRAIT = 2 // портретная (датчик)
+    const val LANDSCAPE = 3 // альбомная (датчик)
+    const val LOCKED_PORTRAIT = 4
+    const val LOCKED_LANDSCAPE = 5
+    const val REVERSE_PORTRAIT = 6
+
+    val labels = listOf(
+        "По умолчанию",
+        "Свободная",
+        "Портретная",
+        "Альбомная",
+        "Заблокированная портретная",
+        "Заблокированная альбомная",
+        "Портретная наоборот",
+    )
+}
+
+/** Зоны касания — как ViewerNavigation в Mihon. */
+object TapZone {
+    const val DEFAULT = 0
+    const val L = 1
+    const val KINDLE = 2
+    const val EDGE = 3
+    const val RIGHT_LEFT = 4
+    const val DISABLED = 5
+
+    val labels = listOf(
+        "По умолчанию",
+        "L-образная",
+        "Kindle-подобная",
+        "По краям",
+        "Справа и слева",
+        "Отключено",
+    )
 }
 
 /** Метаданные произведения: описание, рейтинг, отзыв, автор. */
