@@ -40,6 +40,7 @@ import com.saymon.frame.ui.ReaderScreen
 import com.saymon.frame.ui.Screen
 import com.saymon.frame.ui.SettingsScreen
 import com.saymon.frame.ui.TitleScreen
+import com.saymon.frame.core.ads.AdManager
 import com.saymon.frame.core.ads.BannerAd
 import com.saymon.frame.ui.theme.FrameTheme
 
@@ -87,11 +88,18 @@ private fun Root(vm: LibraryViewModel) {
     }
     FrameTheme(darkTheme = dark) {
         Surface(Modifier.fillMaxSize()) {
-            BackHandler(enabled = vm.canGoBack) { vm.back() }
+            val activity = LocalContext.current as? android.app.Activity
+            // Закрытие главы (выход из читалки) — момент для межстраничной рекламы.
+            val goBack: () -> Unit = {
+                val closingChapter = vm.screen is Screen.Reader
+                vm.back()
+                if (closingChapter) activity?.let { AdManager.show(it) }
+            }
+            BackHandler(enabled = vm.canGoBack) { goBack() }
             when (val s = vm.screen) {
                 is Screen.Reader -> ReaderScreen(
                     vm, s.titleId, s.chapterUri,
-                    onBack = { vm.back() })
+                    onBack = goBack)
                 is Screen.Title -> TitleScreen(
                     vm, s.titleId,
                     onBack = { vm.back() },

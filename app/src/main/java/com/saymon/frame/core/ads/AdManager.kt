@@ -14,14 +14,16 @@ import com.yandex.mobile.ads.interstitial.InterstitialAdLoader
 
 /**
  * Межстраничная реклама РСЯ для Frame.
- * Логика как в PDF2CBZ: реклама предзагружается заранее.
- * Показываем её при открытии произведения (не во время чтения).
+ * Реклама предзагружается заранее (в FrameApp) и показывается при
+ * закрытии главы — то есть при выходе из читалки в список глав.
  */
 object AdManager {
 
     // ID блоков РСЯ для Frame.
     const val INTERSTITIAL_AD_UNIT_ID = "R-M-20317549-2"
     const val BANNER_AD_UNIT_ID = "R-M-20317549-1"
+
+    private const val TAG = "FrameAds"
 
     private var loader: InterstitialAdLoader? = null
     private var ad: InterstitialAd? = null
@@ -48,16 +50,20 @@ object AdManager {
                 AdRequest.Builder(INTERSTITIAL_AD_UNIT_ID).build(),
                 object : InterstitialAdLoadListener {
                     override fun onAdLoaded(ad: InterstitialAd) {
+                        android.util.Log.d(TAG, "interstitial loaded")
                         AdManager.ad = ad
                     }
 
                     override fun onAdFailedToLoad(error: AdRequestError) {
+                        android.util.Log.w(
+                            TAG,
+                            "interstitial failed: ${error.code} ${error.description}")
                         AdManager.ad = null
                     }
                 },
             )
-        } catch (_: Exception) {
-            // без рекламы — просто продолжаем
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "interstitial preload error: ${e.message}")
         }
     }
 
@@ -67,24 +73,45 @@ object AdManager {
         val a = if (cooledDown) ad else null
         ad = null
         if (a == null) {
+            android.util.Log.d(
+                TAG, "interstitial skipped: " + if (!cooledDown) "cooldown" else "not loaded")
             onDone()
             preload(activity)
             return
         }
+        android.util.Log.d(TAG, "interstitial show")
         markShown(activity)
+        var finished = false
+        fun finish() {
+            if (finished) return
+            finished = true
+            onDone()
+            preload(activity)
+        }
         a.setAdEventListener(object : InterstitialAdEventListener {
-            override fun onAdShown() {}
-            override fun onAdFailedToShow(error: AdError) {}
-            override fun onAdDismissed() { onDone() }
+            override fun onAdShown() {
+                android.util.Log.d(TAG, "interstitial shown")
+            }
+
+            override fun onAdFailedToShow(error: AdError) {
+                android.util.Log.w(
+                    TAG, "interstitial show failed: ${error.description}")
+                finish()
+            }
+
+            override fun onAdDismissed() {
+                android.util.Log.d(TAG, "interstitial dismissed")
+                finish()
+            }
+
             override fun onAdClicked() {}
             override fun onAdImpression(data: ImpressionData?) {}
         })
         try {
             a.show(activity)
-        } catch (_: Exception) {
-            onDone()
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "interstitial show error: ${e.message}")
+            finish()
         }
-        onDone()
-        preload(activity)
     }
 }

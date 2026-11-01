@@ -9,7 +9,6 @@ class FrameApp : Application() {
         super.onCreate()
         try {
             YandexAds.enableLogging(true)
-            YandexAds.enableDebugErrorIndicator(true)
             YandexAds.setUserConsent(false)
             YandexAds.initialize(this) {
                 AdManager.preload(this)
