@@ -1,6 +1,5 @@
 package com.saymon.frame.core.ads
 
-import android.content.Context
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
@@ -20,6 +19,10 @@ import com.yandex.mobile.ads.common.AdRequest
  * Баннерная реклама РСЯ для Frame.
  * Показывается внизу экранов «Библиотека» и «История» — над панелью навигации.
  * Не показывается во время чтения и на экране произведения.
+ *
+ * Высота берётся из адаптивного sticky-размера (минимум 50dp, максимум 15%
+ * высоты экрана). Не фиксируем 50dp вручную: для видеорекламы РСЯ требует
+ * блок не меньше 300×60dp.
  */
 @Composable
 fun BannerAd(
@@ -27,13 +30,16 @@ fun BannerAd(
 ) {
     val context = LocalContext.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val adSize = remember { BannerAdSize.sticky(context, screenWidthDp) }
     val bannerAdView = remember {
         BannerAdView(context).apply {
-            setAdSize(BannerAdSize.sticky(context, screenWidthDp))
+            setAdSize(adSize)
         }
     }
 
     DisposableEffect(bannerAdView) {
+        android.util.Log.d(
+            "FrameAds", "banner size: ${adSize.width}x${adSize.height} dp")
         val adRequest = AdRequest.Builder(AdManager.BANNER_AD_UNIT_ID).build()
         bannerAdView.setBannerAdEventListener(object : BannerAdEventListener {
             override fun onAdLoaded() {
@@ -61,6 +67,6 @@ fun BannerAd(
         factory = { bannerAdView },
         modifier = modifier
             .fillMaxWidth()
-            .height(50.dp),
+            .height(adSize.height.dp),
     )
 }
