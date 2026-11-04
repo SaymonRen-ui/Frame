@@ -13,7 +13,7 @@
   documentfile, material-icons; JUnit4 для тестов
 - CBZ — свой разбор ZIP (`core/cbz/Cbz.kt`), PDF — штатный
   `android.graphics.pdf.PdfRenderer`, зависимостей ноль
-- Пакет `com.saymon.frame`, versionCode 1 / versionName 0.1.0, APK `Frame.apk`
+- Пакет `com.saymon.frame`, versionCode 1 / versionName 1.0.0, APK `Frame.apk`
 
 ## Что сделано
 - Библиотека из папки: SAF tree URI (Android 11+) или `/sdcard/Frame`
