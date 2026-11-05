@@ -1,23 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Рамка-кадр -->
+
+    <!-- Frame: rounded square outline -->
     <path
+        android:pathData="M40,26.5 H68 A13.5,13.5 0 0 1 81.5,40 V68 A13.5,13.5 0 0 1 68,81.5 H40 A13.5,13.5 0 0 1 26.5,68 V40 A13.5,13.5 0 0 1 40,26.5 Z"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
+        android:strokeWidth="5"
         android:strokeLineCap="round"
-        android:pathData="M30,26 L78,26 L78,82 L30,82 Z" />
-    <!-- Буква Ф: овал + ножка -->
+        android:strokeLineJoin="round" />
+
+    <!-- Open book: left page -->
     <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M42,52 a12,11 0 1,0 24,0 a12,11 0 1,0 -24,0" />
+        android:pathData="M37.6,66 L52.6,66 L52.6,45.2 C52.6,44.4 44.3,42 37.6,42 A1.6,1.6 0 0 0 36,43.6 L36,64.4 A1.6,1.6 0 0 0 37.6,66 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Open book: right page -->
     <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M54,41 L54,79" />
+        android:pathData="M70.4,66 L55.4,66 L55.4,45.2 C55.4,44.4 63.7,42 70.4,42 A1.6,1.6 0 0 1 72,43.6 L72,64.4 A1.6,1.6 0 0 1 70.4,66 Z"
+        android:fillColor="#FFFFFF" />
 </vector>
